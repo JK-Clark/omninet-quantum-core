@@ -1,0 +1,3 @@
+fastapi
+uvicorn
+# Add other dependencies here
