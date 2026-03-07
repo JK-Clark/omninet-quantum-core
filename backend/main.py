@@ -42,6 +42,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -50,11 +51,10 @@ from sqlalchemy.orm import Session
 from ai_predictor import FailurePredictor, get_predictor
 from database import get_db, init_db, settings
 from license_manager import LicenseManager, get_license_manager, require_feature
-from models import Alert, Device, License, TopologyLink, User
+from models import Device, TopologyLink, User
 from network_drivers import NetworkDiscoveryEngine
-from quantum_engine import generate_keypair, get_quantum_keypair
+from quantum_engine import get_quantum_keypair
 from schemas import (
-    APIError,
     APIResponse,
     DeviceCreate,
     DeviceOut,
@@ -160,19 +160,7 @@ app.add_middleware(
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 
-# ─── Helper: current user from Bearer token ───────────────────────────────────
-
-async def get_current_user(
-    token: str = Depends(
-        lambda: None  # replaced below
-    ),
-    db: Session = Depends(get_db),
-) -> User:
-    # Implemented via explicit header parsing in each route
-    raise NotImplementedError
-
-
-from fastapi.security import OAuth2PasswordBearer  # noqa: E402
+# ─── Auth: current user from Bearer token ────────────────────────────────────
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 

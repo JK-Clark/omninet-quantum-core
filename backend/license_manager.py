@@ -4,9 +4,7 @@ License management: tier validation, feature enforcement, and expiry checking.
 
 import datetime
 import enum
-import functools
 import logging
-import re
 import uuid
 from typing import Callable, Optional
 
@@ -16,11 +14,6 @@ from sqlalchemy.orm import Session
 from database import get_db
 
 logger = logging.getLogger(__name__)
-
-# UUID v4 pattern used for license key format validation
-_KEY_PATTERN = re.compile(
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
-)
 
 # Device limits per tier (None = unlimited)
 TIER_DEVICE_LIMITS = {

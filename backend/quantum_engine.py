@@ -129,8 +129,6 @@ def derive_aaa_token(shared_secret: bytes, user_id: str) -> str:
 
 # ─── FastAPI dependency ───────────────────────────────────────────────────────
 
-import threading
-
 _GLOBAL_KEYPAIR: QuantumKeyPair | None = None
 _KEYPAIR_LOCK = threading.Lock()
 
