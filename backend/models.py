@@ -73,11 +73,15 @@ class License(Base):
     __tablename__ = "licenses"
 
     id: int = Column(Integer, primary_key=True, index=True)
-    key: str = Column(String(255), unique=True, index=True, nullable=False)
+    # String(512) to accommodate the base64-payload + signature format used by
+    # the hardware-locked Ed25519 licensing system.
+    key: str = Column(String(512), unique=True, index=True, nullable=False)
     tier: str = Column(Enum(LicenseTierEnum), nullable=False)
     activated_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     expires_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     max_devices: Optional[int] = Column(Integer, nullable=True)
+    # SHA-256 fingerprint (32 hex chars) of the server this license is bound to.
+    hardware_id: Optional[str] = Column(String(64), nullable=True)
     is_active: bool = Column(Boolean, default=False, nullable=False)
 
 

@@ -70,6 +70,7 @@ class LicenseOut(BaseModel):
     activated_at: Optional[datetime.datetime]
     expires_at: Optional[datetime.datetime]
     max_devices: Optional[int]
+    hardware_id: Optional[str]
     is_active: bool
 
     model_config = {"from_attributes": True}
