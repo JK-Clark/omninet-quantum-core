@@ -82,6 +82,7 @@ class LicenseStatusResponse(BaseModel):
     expires_at: Optional[datetime.datetime]
     max_devices: Optional[int]
     days_remaining: Optional[int]
+    message: Optional[str] = None
 
 
 # ─── Alert ───────────────────────────────────────────────────────────────────

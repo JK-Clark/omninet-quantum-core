@@ -1,6 +1,7 @@
 """
 License management: hardware-locked tier validation, Ed25519 signature
-verification, date-tampering protection, and feature enforcement.
+verification, mandatory-expiry enforcement, anti-fraud clock-rollback
+detection, and feature gating.
 
 Key format
 ----------
@@ -16,7 +17,17 @@ Key format
   issuer's private key — never committed to this repository — can produce
   valid signatures.
 
-  Use ``null`` as the ``exp`` value for perpetual (non-expiring) licenses.
+  Every license key **must** carry a non-null ``exp`` value.  Perpetual
+  (non-expiring) licenses are not supported by this business model.
+
+Anti-fraud clock-rollback detection
+------------------------------------
+  On every successful tier evaluation the current UTC timestamp is persisted
+  to the ``License.last_checked_at`` column.  On the following evaluation, if
+  the system clock reports a time more than :data:`_ROLLBACK_TOLERANCE` before
+  ``last_checked_at`` a clock-rollback is inferred and the system immediately
+  falls back to TRIAL without updating the stored timestamp.  The "future"
+  value in ``last_checked_at`` continues to detect rollback on subsequent calls.
 """
 
 import base64
@@ -52,14 +63,14 @@ _PUBLIC_KEY_HEX = "50e2d4307b40df4891ed8b80c49485d0774c1c2cac09e1363a88ac4bf5144
 TRIAL_DURATION_DAYS = 7
 
 # Device limits per tier (None = unlimited)
-TIER_DEVICE_LIMITS: dict = {
+TIER_DEVICE_LIMITS: dict[str, Optional[int]] = {
     "TRIAL": 10,
     "COMMUNITY": None,
     "BANK": None,
 }
 
 # Features and the tiers that are permitted to use them
-_FEATURE_TIERS: dict = {
+_FEATURE_TIERS: dict[str, set[str]] = {
     "ai_prediction": {"BANK"},
     "quantum_crypto": {"BANK"},
     "basic_topology": {"TRIAL", "COMMUNITY", "BANK"},
@@ -67,9 +78,13 @@ _FEATURE_TIERS: dict = {
     "priority_support": {"BANK"},
 }
 
-# Tolerance window for clock-rollback detection.  If the system clock shows a
-# time more than this far *before* the recorded activation timestamp we treat
-# the license as invalid and fall back to TRIAL.
+# Tolerance window used when comparing utcnow() against last_checked_at for
+# fine-grained clock-rollback detection.  5 minutes covers normal NTP
+# micro-adjustments without allowing meaningful time-travel fraud.
+_ROLLBACK_TOLERANCE = datetime.timedelta(minutes=5)
+
+# Coarse safety net: if utcnow() is more than this far before activated_at we
+# treat the license as invalid (catches gross clock resets at activation time).
 _MAX_CLOCK_SKEW = datetime.timedelta(hours=24)
 
 # All OmniNet license keys begin with this sentinel prefix
@@ -132,7 +147,7 @@ def _b64url_decode(s: str) -> bytes:
 
 def parse_and_verify_license_key(
     key: str, hardware_id: str
-) -> Tuple[LicenseTier, Optional[datetime.datetime]]:
+) -> Tuple[LicenseTier, datetime.datetime]:
     """Parse *key*, verify its Ed25519 signature, and validate the hardware ID.
 
     Args:
@@ -141,11 +156,11 @@ def parse_and_verify_license_key(
             (from :func:`get_hardware_id`).
 
     Returns:
-        ``(tier, expires_at)`` — ``expires_at`` is ``None`` for perpetual
-        licenses.
+        ``(tier, expires_at)`` — ``expires_at`` is always a concrete datetime;
+        perpetual (null-expiry) licenses are rejected.
 
     Raises:
-        :class:`~fastapi.HTTPException` ``400`` — malformed key.
+        :class:`~fastapi.HTTPException` ``400`` — malformed or perpetual key.
         :class:`~fastapi.HTTPException` ``402`` — key has expired.
         :class:`~fastapi.HTTPException` ``403`` — invalid signature or
             hardware ID mismatch (system remains in TRIAL).
@@ -228,24 +243,38 @@ def parse_and_verify_license_key(
             detail={"error_code": "INVALID_TIER", "message": f"Unknown tier: '{payload['tier']}'."},
         )
 
-    # ── Expiry ────────────────────────────────────────────────────────
-    expires_at: Optional[datetime.datetime] = None
-    if payload["exp"] is not None:
-        try:
-            expires_at = datetime.datetime.fromisoformat(str(payload["exp"]))
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"error_code": "INVALID_KEY_FORMAT", "message": "Malformed expiry date in license."},
-            )
-        if expires_at < datetime.datetime.utcnow():
-            raise HTTPException(
-                status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail={
-                    "error_code": "LICENSE_EXPIRED",
-                    "message": f"License expired on {expires_at.date()}.  Please renew.",
-                },
-            )
+    # ── Expiry (mandatory — perpetual licenses are not permitted) ────────
+    if payload["exp"] is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error_code": "MISSING_EXPIRY",
+                "message": "Toutes les licences doivent comporter une date d'expiration.",
+            },
+        )
+    if not isinstance(payload["exp"], str):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error_code": "INVALID_KEY_FORMAT", "message": "Expiry date must be an ISO-8601 string."},
+        )
+    try:
+        expires_at: datetime.datetime = datetime.datetime.fromisoformat(payload["exp"])
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error_code": "INVALID_KEY_FORMAT", "message": "Malformed expiry date in license."},
+        )
+    if expires_at < datetime.datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error_code": "LICENSE_EXPIRED",
+                "message": (
+                    "Votre licence a expiré. "
+                    "Contactez Genio Elite pour le renouvellement."
+                ),
+            },
+        )
 
     return tier, expires_at
 
@@ -282,6 +311,7 @@ class LicenseManager:
             existing.expires_at = expires_at
             existing.max_devices = max_devices
             existing.hardware_id = hw_id
+            existing.last_checked_at = now
             existing.is_active = True
             self.db.commit()
             self.db.refresh(existing)
@@ -295,6 +325,7 @@ class LicenseManager:
             expires_at=expires_at,
             max_devices=max_devices,
             hardware_id=hw_id,
+            last_checked_at=now,
             is_active=True,
         )
         self.db.add(license_record)
@@ -308,18 +339,24 @@ class LicenseManager:
     def get_current_tier(self) -> LicenseTier:
         """Return the active license tier (defaults to TRIAL if none found).
 
-        Applies three runtime checks on every call:
+        Applies four runtime checks on every call:
 
-        1. **Clock-rollback protection** — if ``utcnow()`` is more than
-           :data:`_MAX_CLOCK_SKEW` before the stored ``activated_at``, the
-           system clock has likely been wound back to extend the trial window.
-           The license is treated as invalid.
-        2. **Expiry check** — if ``expires_at`` is in the past the license is
-           marked inactive and the system falls back to TRIAL.
-        3. **Hardware ID check** — if the current server's fingerprint no
-           longer matches the fingerprint recorded at activation (e.g. the
-           licence file was copied to a different machine) the system falls
-           back to TRIAL without marking the licence inactive.
+        1. **Fine-grained clock-rollback detection** (``last_checked_at``) —
+           the most recent successful evaluation timestamp is persisted in the
+           database.  If the system clock now reads more than
+           :data:`_ROLLBACK_TOLERANCE` (5 min) before that timestamp, a
+           rollback is inferred.  ``last_checked_at`` is intentionally *not*
+           updated on rollback detection so the "future" value continues to
+           flag subsequent calls.
+        2. **Coarse clock-rollback safety net** (``activated_at``) — catches
+           gross clock resets that occurred before the first evaluation.
+        3. **Expiry check** — if ``expires_at`` has passed, the license is
+           marked inactive and the system falls back to TRIAL with the
+           localised renewal message.
+        4. **Hardware ID re-validation** — if the current server fingerprint
+           no longer matches the one recorded at activation the system falls
+           back to TRIAL without marking the licence inactive (so the original
+           server can still use it).
         """
         from models import License
 
@@ -331,33 +368,55 @@ class LicenseManager:
 
         now = datetime.datetime.utcnow()
 
-        # ── 1. Clock-rollback detection ───────────────────────────────
+        # ── 1. Fine-grained rollback detection via last_checked_at ────────────
+        if (
+            license_record.last_checked_at is not None
+            and now < license_record.last_checked_at - _ROLLBACK_TOLERANCE
+        ):
+            logger.warning(
+                "Clock rollback detected via last_checked_at "
+                "(now=%s, last_checked_at=%s, tolerance=%s). Reverting to TRIAL.",
+                now.isoformat(),
+                license_record.last_checked_at.isoformat(),
+                _ROLLBACK_TOLERANCE,
+            )
+            # Do NOT update last_checked_at — keep the "future" value so
+            # subsequent calls continue to detect the rollback.
+            return LicenseTier.TRIAL
+
+        # ── 2. Coarse rollback safety net via activated_at ────────────────────
         if (
             license_record.activated_at is not None
             and now < license_record.activated_at - _MAX_CLOCK_SKEW
         ):
             logger.warning(
-                "Clock rollback detected (now=%s, activated_at=%s). "
-                "Reverting to TRIAL.",
+                "Gross clock rollback detected via activated_at "
+                "(now=%s, activated_at=%s). Reverting to TRIAL.",
                 now.isoformat(),
                 license_record.activated_at.isoformat(),
             )
             return LicenseTier.TRIAL
 
-        # ── 2. Expiry ─────────────────────────────────────────────────
+        # ── 3. Expiry check ───────────────────────────────────────────────────
         if license_record.expires_at is not None and license_record.expires_at < now:
             license_record.is_active = False
             self.db.commit()
             logger.info("License %.20s expired; reverting to TRIAL.", license_record.key)
+            # The localised renewal message is surfaced via get_license_status();
+            # here we simply return TRIAL.
             return LicenseTier.TRIAL
 
-        # ── 3. Hardware ID re-validation ──────────────────────────────
+        # ── 4. Hardware ID re-validation ──────────────────────────────────────
         if license_record.hardware_id and license_record.hardware_id != get_hardware_id():
             logger.warning(
                 "Hardware ID mismatch at runtime (stored=%s). Reverting to TRIAL.",
                 license_record.hardware_id,
             )
             return LicenseTier.TRIAL
+
+        # ── All checks passed: persist the current timestamp ──────────────────
+        license_record.last_checked_at = now
+        self.db.commit()
 
         return LicenseTier(license_record.tier)
 
@@ -374,12 +433,26 @@ class LicenseManager:
                 "expires_at": None,
                 "max_devices": TIER_DEVICE_LIMITS["TRIAL"],
                 "days_remaining": None,
+                "message": None,
             }
 
+        now = datetime.datetime.utcnow()
         days_remaining: Optional[int] = None
+        message: Optional[str] = None
+
         if license_record.expires_at:
-            delta = license_record.expires_at - datetime.datetime.utcnow()
+            delta = license_record.expires_at - now
             days_remaining = max(0, delta.days)
+            if days_remaining == 0 and license_record.expires_at < now:
+                message = (
+                    "Votre licence a expiré. "
+                    "Contactez Genio Elite pour le renouvellement."
+                )
+            elif days_remaining <= 30:
+                message = (
+                    f"Votre licence expire dans {days_remaining} jour(s). "
+                    "Contactez Genio Elite pour le renouvellement."
+                )
 
         return {
             "tier": license_record.tier,
@@ -387,6 +460,7 @@ class LicenseManager:
             "expires_at": license_record.expires_at,
             "max_devices": license_record.max_devices,
             "days_remaining": days_remaining,
+            "message": message,
         }
 
     # ─── Enforcement ─────────────────────────────────────────────────────

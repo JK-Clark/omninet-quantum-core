@@ -82,6 +82,10 @@ class License(Base):
     max_devices: Optional[int] = Column(Integer, nullable=True)
     # SHA-256 fingerprint (32 hex chars) of the server this license is bound to.
     hardware_id: Optional[str] = Column(String(64), nullable=True)
+    # UTC timestamp of the most recent successful license tier evaluation.
+    # Used for clock-rollback anti-fraud detection: if utcnow() is significantly
+    # before this value the system clock has been wound back.
+    last_checked_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     is_active: bool = Column(Boolean, default=False, nullable=False)
 
 
