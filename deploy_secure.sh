@@ -185,34 +185,50 @@ fi
 # ─── Step 4: Docker Image Build ───────────────────────────────────────────────
 info "STEP 4/5  Building Docker images…"
 
-# Override the backend context to use obfuscated source
-# We create a temporary docker-compose.secure.yml that points to .secure_build/backend
+# Override the backend context to use obfuscated source.
+# We create a temporary docker-compose.secure.yml that points to .secure_build/backend.
+# ALL relative build contexts are converted to absolute paths so that Docker can
+# resolve them correctly when the compose file is read from a different directory
+# (i.e., from inside .secure_build/ rather than the project root).
 
 COMPOSE_SECURE="${DIST_DIR}/docker-compose.secure.yml"
 cp "${SCRIPT_DIR}/docker-compose.yml" "$COMPOSE_SECURE"
 
-# Patch backend build context to point to obfuscated directory
-# Using python3 for portable YAML manipulation without yq dependency
-python3 - "$COMPOSE_SECURE" "${BACKEND_DIST}" <<'PYFIXER'
+# Patch every build context in the secure compose file:
+#   ./backend  → absolute path to obfuscated backend (BACKEND_DIST)
+#   ./frontend → absolute path to source frontend dir (FRONTEND_DIR)
+#   ./nginx    → absolute path to nginx config dir
+# Using python3 for portable YAML manipulation without yq dependency.
+python3 - "$COMPOSE_SECURE" "${BACKEND_DIST}" "${FRONTEND_DIR}" "${SCRIPT_DIR}/nginx" <<'PYFIXER'
 import sys, re
 
 compose_path = sys.argv[1]
 backend_dist = sys.argv[2]
+frontend_dir = sys.argv[3]
+nginx_dir    = sys.argv[4]
 
 with open(compose_path, "r") as f:
     content = f.read()
 
-# Replace: context: ./backend  →  context: <backend_dist>
-content = re.sub(
-    r'(build:\s*\n\s+context:)\s*\./backend',
-    f'\\1 {backend_dist}',
-    content,
-)
+# Map of relative-context pattern → absolute replacement.
+# The regex matches "context: ./NAME" anywhere in the file.
+replacements = [
+    ("backend",  r'(context:)\s*\./backend',  f'\\1 {backend_dist}'),
+    ("frontend", r'(context:)\s*\./frontend', f'\\1 {frontend_dir}'),
+    ("nginx",    r'(context:)\s*\./nginx',    f'\\1 {nginx_dir}'),
+]
+
+for service_name, pattern, replacement in replacements:
+    new_content = re.sub(pattern, replacement, content)
+    if new_content != content:
+        abs_path = replacement.replace('\\1 ', '')
+        print(f"[pyfixer] {service_name}: ./{service_name} → {abs_path}")
+    content = new_content
 
 with open(compose_path, "w") as f:
     f.write(content)
 
-print(f"[pyfixer] Patched backend build context → {backend_dist}")
+print("[pyfixer] Secure compose file written with all absolute build contexts.")
 PYFIXER
 
 if [ "$SKIP_FRONTEND" = false ] && [ -d "$FRONTEND_DIST" ]; then
