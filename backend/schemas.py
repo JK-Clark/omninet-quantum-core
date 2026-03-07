@@ -142,6 +142,23 @@ class MetricsPayload(BaseModel):
     latency_ms: float
 
 
+# ─── Reports ──────────────────────────────────────────────────────────────────
+
+class ReportGenerateRequest(BaseModel):
+    lang: str = Field(
+        default="EN",
+        description="Report language: EN, FR, HI, or KO.",
+        pattern="^(EN|FR|HI|KO)$",
+    )
+
+
+class ReportStatusResponse(BaseModel):
+    status: str
+    message: str
+    lang: str
+    generated_at: datetime.datetime
+
+
 # ─── API Envelope ────────────────────────────────────────────────────────────
 
 class APIResponse(BaseModel):

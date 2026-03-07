@@ -29,6 +29,7 @@ import asyncio
 import datetime
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
@@ -41,7 +42,7 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -54,6 +55,7 @@ from license_manager import LicenseManager, get_license_manager, require_feature
 from models import Device, TopologyLink, User
 from network_drivers import NetworkDiscoveryEngine
 from quantum_engine import get_quantum_keypair
+from reports_engine import ReportEngine, ReportScheduler, build_report_data
 from schemas import (
     APIResponse,
     DeviceCreate,
@@ -65,6 +67,8 @@ from schemas import (
     LoginRequest,
     MetricsPayload,
     PredictionResponse,
+    ReportGenerateRequest,
+    ReportStatusResponse,
     TokenResponse,
     TopologyLinkOut,
     TopologyMapResponse,
@@ -129,6 +133,9 @@ class ConnectionManager:
 
 ws_manager = ConnectionManager()
 
+# ─── Report scheduler (module-level singleton) ────────────────────────────────
+
+_report_scheduler = ReportScheduler(get_db)
 
 # ─── App lifecycle ────────────────────────────────────────────────────────────
 
@@ -137,8 +144,11 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     init_db()
     # Pre-generate the server quantum keypair on startup
     get_quantum_keypair()
+    # Start monthly report scheduler
+    _report_scheduler.start()
     logger.info("OmniNet Quantum-Core started.")
     yield
+    _report_scheduler.shutdown()
     logger.info("OmniNet Quantum-Core shutting down.")
 
 
@@ -448,6 +458,63 @@ async def ws_topology(websocket: WebSocket, db: Session = Depends(get_db)) -> No
             await asyncio.sleep(5)
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
+
+
+# ─── Report routes ────────────────────────────────────────────────────────────
+
+@app.post(
+    "/api/reports/generate",
+    dependencies=[Depends(require_feature("ai_prediction"))],
+    summary="Generate a PDF audit report",
+    tags=["Reports"],
+)
+def generate_report(
+    payload: ReportGenerateRequest,
+    db: Session = Depends(get_db),
+    _user: User = Depends(current_user_dep),
+) -> StreamingResponse:
+    """Generate and stream a four-page PDF audit report.
+
+    Requires the **BANK** license tier (``ai_prediction`` feature).
+    Supports ``lang`` values: ``EN``, ``FR``, ``HI``, ``KO``.
+    """
+    lang = payload.lang.upper()
+    data = build_report_data(db, lang)
+    engine = ReportEngine()
+    pdf_bytes = engine.generate_pdf(data, lang=lang)
+    timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"omninet_audit_{timestamp}_{lang}.pdf"
+    return StreamingResponse(
+        content=iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get(
+    "/api/reports/status",
+    response_model=APIResponse,
+    summary="Report scheduler status",
+    tags=["Reports"],
+)
+def report_scheduler_status(
+    _user: User = Depends(current_user_dep),
+) -> APIResponse:
+    """Return the current status of the monthly report scheduler."""
+    running = (
+        _report_scheduler._scheduler is not None
+        and _report_scheduler._scheduler.running
+    )
+    return APIResponse(data=ReportStatusResponse(
+        status="running" if running else "stopped",
+        message=(
+            "Scheduler active — report fires on the 1st of every month at 07:00 UTC."
+            if running
+            else "Scheduler not running."
+        ),
+        lang=os.environ.get("REPORT_LANGUAGE", "EN"),
+        generated_at=datetime.datetime.utcnow(),
+    ).model_dump())
 
 
 # ─── Health ───────────────────────────────────────────────────────────────────
