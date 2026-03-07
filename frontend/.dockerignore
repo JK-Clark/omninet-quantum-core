@@ -1,0 +1,30 @@
+# Exclude local development artifacts from the Docker build context.
+# Without this file Docker sends everything to the daemon, which means
+# stale node_modules or pre-built dist/ files can shadow the fresh build
+# and cause unexpected failures (including "no such file or directory" errors
+# when Docker can't reconcile the local filesystem state with expected paths).
+
+# --- Node / npm ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Build output ---
+dist/
+build/
+
+# --- Local environment ---
+.env
+.env.local
+.env.*.local
+
+# --- Editor / OS ---
+.DS_Store
+.vscode/
+*.swp
+*.swo
+
+# --- Test / coverage ---
+coverage/
+.nyc_output/

@@ -1,12 +1,21 @@
-FROM python:3.11
+FROM python:3.11-slim AS builder
 
-# Install FastAPI and other dependencies
-RUN pip install fastapi uvicorn
+WORKDIR /build
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# Set working directory
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
+COPY --from=builder /install /usr/local
 COPY . /app
 
-# Command to run the app
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
+EXPOSE 8000
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+

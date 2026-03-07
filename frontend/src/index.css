@@ -1,0 +1,16 @@
+/* © 2021-2026 Jonathan Kamu / Genio Elite. All rights reserved. */
+/* Proprietary and confidential. Unauthorized reproduction or distribution is strictly prohibited. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-100 font-sans;
+  }
+}
+
+/* React Flow custom styles */
+.react-flow__node {
+  @apply rounded-lg shadow-lg;
+}

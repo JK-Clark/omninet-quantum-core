@@ -1,0 +1,47 @@
+# Exclude local development artifacts from the Docker build context.
+# Without this file Docker sends everything to the daemon, including Python
+# cache files, local virtual environments, and generated databases.
+
+# --- Python cache ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- Virtual environments ---
+venv/
+.venv/
+env/
+.env/
+
+# --- Local environment ---
+.env
+.env.local
+.env.*.local
+
+# --- Database / generated files ---
+*.db
+*.sqlite3
+*.sqlite
+integrity_manifest.json
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Editor / OS ---
+.DS_Store
+.vscode/
+*.swp
+*.swo
+
+# --- Test / coverage ---
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# --- Distribution ---
+*.egg-info/
+dist/
+build/
