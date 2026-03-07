@@ -363,6 +363,9 @@ class ReportData:
         default_factory=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
     license_tier: str = "TRIAL"
+    license_days_remaining: Optional[int] = None  # None = no expiry date recorded
+    license_expires_at: Optional[datetime.datetime] = None
+    license_expiry_alert_level: str = "ok"  # "ok" | "warning" | "critical" | "grace" | "expired"
 
     @property
     def health_score(self) -> int:
@@ -529,6 +532,89 @@ class ReportEngine:
         c.setFont("Helvetica", 8)
         c.drawCentredString(x + w / 2, y - h + 8, label)
 
+    def _draw_license_status_box(self, c: Any, data: "ReportData", lang: str, y: float) -> float:
+        """Draw the license status framed box on page 1 of the report.
+
+        The box is always present and is colour-coded by urgency:
+
+        * Green border — license is valid with more than 30 days remaining.
+        * Orange border — warning zone: 30 days or fewer remaining.
+        * Red border + action-required text — ≤7 days, grace period, or expired.
+
+        Returns the updated Y coordinate after the box.
+        """
+        m = self._MARGIN
+        w = self._PAGE_W
+        box_w = w - 2 * m
+        box_h = 46
+
+        level = data.license_expiry_alert_level
+
+        # Choose border / header colour by alert level
+        if level in ("critical", "grace", "expired"):
+            border_colour = self._RED
+            header_colour = self._RED
+        elif level == "warning":
+            border_colour = self._ORANGE
+            header_colour = self._ORANGE
+        else:
+            border_colour = self._GREEN
+            header_colour = self._GREEN
+
+        # Outer rectangle
+        c.setStrokeColorRGB(*border_colour)
+        c.setLineWidth(1.5)
+        c.roundRect(m, y - box_h, box_w, box_h, 4, fill=0, stroke=1)
+
+        # Header strip
+        c.setFillColorRGB(*header_colour)
+        c.roundRect(m, y - 16, box_w, 16, 4, fill=1, stroke=0)
+        c.setFillColorRGB(*self._WHITE)
+        c.setFont("Helvetica-Bold", 9)
+        _lic_labels = {
+            "EN": "LICENSE STATUS",
+            "FR": "STATUT DE LA LICENCE",
+            "HI": "लाइसेंस स्थिति",
+            "KO": "라이선스 상태",
+        }
+        c.drawString(m + 6, y - 11, _lic_labels.get(lang, "LICENSE STATUS"))
+
+        # Body text
+        tier_label = data.license_tier
+        if data.license_expires_at:
+            exp_str = data.license_expires_at.strftime("%Y-%m-%d")
+        else:
+            exp_str = "—"
+
+        if data.license_days_remaining is not None:
+            days_str = str(data.license_days_remaining)
+        else:
+            days_str = "—"
+
+        body_lines: List[str] = []
+        _tier_pfx = {"EN": "Tier", "FR": "Niveau", "HI": "स्तर", "KO": "등급"}.get(lang, "Tier")
+        _exp_pfx = {"EN": "Expires", "FR": "Expire", "HI": "समाप्त", "KO": "만료"}.get(lang, "Expires")
+        _days_pfx = {"EN": "Days remaining", "FR": "Jours restants", "HI": "दिन शेष", "KO": "남은 일수"}.get(lang, "Days remaining")
+        body_lines.append(f"{_tier_pfx}: {tier_label}   |   {_exp_pfx}: {exp_str}   |   {_days_pfx}: {days_str}")
+
+        if level in ("critical", "grace", "expired"):
+            _action = {
+                "EN": "Action required: Contact support@genioelite.io for renewal.",
+                "FR": "Action requise : Contactez support@genioelite.io pour le renouvellement.",
+                "HI": "कार्रवाई आवश्यक: नवीनीकरण के लिए support@genioelite.io से संपर्क करें।",
+                "KO": "조치 필요: 갱신을 위해 support@genioelite.io에 문의하세요.",
+            }.get(lang, "Action required: Contact support@genioelite.io for renewal.")
+            body_lines.append(_action)
+
+        c.setFillColorRGB(*self._BLACK)
+        c.setFont("Helvetica", 8)
+        text_y = y - 22
+        for line in body_lines:
+            c.drawString(m + 6, text_y, line)
+            text_y -= 12
+
+        return y - box_h - 8  # return Y below the box with a small gap
+
     def _draw_table(
         self,
         c: Any,
@@ -587,6 +673,9 @@ class ReportEngine:
 
         # Page title
         y = self._draw_section_title(c, _t("p1_title", lang), y)
+
+        # ── License status box (always visible on page 1) ───────────────
+        y = self._draw_license_status_box(c, data, lang, y)
 
         # ── Health score gauge ──────────────────────────────────────────
         score = data.health_score
@@ -988,6 +1077,38 @@ def build_report_data(db: Any, lang: str = "EN") -> ReportData:
     iso_results = _evaluate_iso(devices_orm, alerts_orm)
     pci_results = _evaluate_pci(devices_orm, alerts_orm)
 
+    # ── License expiry data ───────────────────────────────────────────────────
+    license_tier = "TRIAL"
+    license_days_remaining: Optional[int] = None
+    license_expires_at: Optional[datetime.datetime] = None
+    license_expiry_alert_level = "ok"
+    try:
+        from models import License
+        from license_manager import GRACE_PERIOD_DAYS
+        lic = db.query(License).filter(License.is_active == True).first()  # noqa: E712
+        if lic:
+            license_tier = lic.tier or "TRIAL"
+            license_expires_at = lic.expires_at
+            if lic.expires_at:
+                now = datetime.datetime.now(datetime.timezone.utc)
+                # Make expires_at timezone-aware for comparison if it is naive
+                exp = lic.expires_at
+                if exp.tzinfo is None:
+                    exp = exp.replace(tzinfo=datetime.timezone.utc)
+                delta = exp - now
+                if now > exp:
+                    grace_deadline = exp + datetime.timedelta(days=GRACE_PERIOD_DAYS)
+                    license_days_remaining = 0
+                    license_expiry_alert_level = "grace" if now <= grace_deadline else "expired"
+                else:
+                    license_days_remaining = delta.days
+                    if license_days_remaining <= 7:
+                        license_expiry_alert_level = "critical"
+                    elif license_days_remaining <= 30:
+                        license_expiry_alert_level = "warning"
+    except Exception:  # pragma: no cover — DB may be unavailable in tests
+        pass
+
     return ReportData(
         devices=devices,
         alerts=alerts,
@@ -995,6 +1116,10 @@ def build_report_data(db: Any, lang: str = "EN") -> ReportData:
         threats=threats,
         iso_results=iso_results,
         pci_results=pci_results,
+        license_tier=license_tier,
+        license_days_remaining=license_days_remaining,
+        license_expires_at=license_expires_at,
+        license_expiry_alert_level=license_expiry_alert_level,
     )
 
 

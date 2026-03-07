@@ -64,6 +64,10 @@ _PUBLIC_KEY_HEX = "50e2d4307b40df4891ed8b80c49485d0774c1c2cac09e1363a88ac4bf5144
 # Days until a TRIAL license expires from the moment it is first activated
 TRIAL_DURATION_DAYS = 7
 
+# Grace period (calendar days) after the license expiry date before features
+# are hard-locked.  This avoids sudden outages over weekends or bank holidays.
+GRACE_PERIOD_DAYS = 3
+
 # Device limits per tier (None = unlimited)
 TIER_DEVICE_LIMITS: dict[str, Optional[int]] = {
     "TRIAL": 10,
@@ -401,14 +405,28 @@ class LicenseManager:
             )
             return LicenseTier.TRIAL
 
-        # ── 3. Expiry check ───────────────────────────────────────────────────
-        if license_record.expires_at is not None and license_record.expires_at < now:
-            license_record.is_active = False
-            self.db.commit()
-            logger.info("License %.20s expired; reverting to TRIAL.", license_record.key)
-            # The localised renewal message is surfaced via get_license_status();
-            # here we simply return TRIAL.
-            return LicenseTier.TRIAL
+        # ── 3. Expiry check (with 3-day grace period) ─────────────────────────
+        if license_record.expires_at is not None:
+            grace_deadline = license_record.expires_at + datetime.timedelta(days=GRACE_PERIOD_DAYS)
+            if now > grace_deadline:
+                # Hard lock: past the grace window — deactivate and revert to TRIAL
+                license_record.is_active = False
+                self.db.commit()
+                logger.info(
+                    "License %.20s expired and grace period elapsed; reverting to TRIAL.",
+                    license_record.key,
+                )
+                return LicenseTier.TRIAL
+            if now > license_record.expires_at:
+                # Soft lock: within grace period — keep the tier active but log
+                logger.info(
+                    "License %.20s is within the %d-day grace period (expires_at=%s).",
+                    license_record.key,
+                    GRACE_PERIOD_DAYS,
+                    license_record.expires_at.isoformat(),
+                )
+                # Fall through to hardware check and normal return so the tier
+                # remains usable during the grace period.
 
         # ── 4. Hardware ID re-validation ──────────────────────────────────────
         if license_record.hardware_id and license_record.hardware_id != get_hardware_id():
@@ -425,6 +443,19 @@ class LicenseManager:
         return LicenseTier(license_record.tier)
 
     def get_license_status(self) -> dict:
+        """Return a rich status dict for the ``GET /api/license/status`` endpoint.
+
+        Returned keys
+        -------------
+        tier               License tier string (TRIAL / COMMUNITY / BANK).
+        is_active          True while the license record is active in the DB.
+        expires_at         ISO-8601 UTC datetime or None.
+        max_devices        Device cap for this tier, or None for unlimited.
+        days_remaining     Calendar days until expiry (0 during grace, None if no date).
+        in_grace_period    True if the nominal expiry has passed but the grace window has not.
+        expiry_alert_level One of: "ok" | "warning" (≤30d) | "critical" (≤7d) | "grace" | "expired".
+        message            Human-readable renewal notice, or None.
+        """
         from models import License
 
         license_record = (
@@ -437,26 +468,62 @@ class LicenseManager:
                 "expires_at": None,
                 "max_devices": TIER_DEVICE_LIMITS["TRIAL"],
                 "days_remaining": None,
+                "in_grace_period": False,
+                "expiry_alert_level": "ok",
                 "message": None,
             }
 
         now = datetime.datetime.utcnow()
         days_remaining: Optional[int] = None
+        in_grace_period: bool = False
+        expiry_alert_level: str = "ok"
         message: Optional[str] = None
 
         if license_record.expires_at:
             delta = license_record.expires_at - now
-            days_remaining = max(0, delta.days)
-            if days_remaining == 0 and license_record.expires_at < now:
-                message = (
-                    "Votre licence a expiré. "
-                    "Contactez Genio Elite pour le renouvellement."
-                )
-            elif days_remaining <= 30:
-                message = (
-                    f"Votre licence expire dans {days_remaining} jour(s). "
-                    "Contactez Genio Elite pour le renouvellement."
-                )
+
+            if now > license_record.expires_at:
+                # Nominal expiry has passed — check grace window
+                grace_deadline = license_record.expires_at + datetime.timedelta(days=GRACE_PERIOD_DAYS)
+                if now <= grace_deadline:
+                    # Within the 3-day grace period
+                    days_remaining = 0
+                    in_grace_period = True
+                    expiry_alert_level = "grace"
+                    grace_left = (grace_deadline - now).days
+                    # API-level messages are intentionally in French as the primary
+                    # commercial language of Genio Elite.  The frontend and PDF engine
+                    # apply their own i18n layer using the expiry_alert_level field.
+                    message = (
+                        f"Votre licence a expiré. Période de grâce : {grace_left} jour(s) restant(s). "
+                        "Action requise : Contactez support@genioelite.io pour le renouvellement."
+                    )
+                else:
+                    # Past grace period — hard expired
+                    days_remaining = 0
+                    in_grace_period = False
+                    expiry_alert_level = "expired"
+                    message = (
+                        "Votre licence a expiré et la période de grâce est écoulée. "
+                        "Action requise : Contactez support@genioelite.io pour le renouvellement."
+                    )
+            else:
+                # Licence still valid — compute warning level
+                days_remaining = delta.days  # positive integer
+                if days_remaining <= 7:
+                    expiry_alert_level = "critical"
+                    message = (
+                        f"⚠ CRITIQUE : Votre licence expire dans {days_remaining} jour(s). "
+                        "Action requise : Contactez support@genioelite.io pour le renouvellement."
+                    )
+                elif days_remaining <= 30:
+                    expiry_alert_level = "warning"
+                    message = (
+                        f"Votre licence expire dans {days_remaining} jour(s). "
+                        "Contactez support@genioelite.io pour le renouvellement."
+                    )
+                else:
+                    expiry_alert_level = "ok"
 
         return {
             "tier": license_record.tier,
@@ -464,6 +531,8 @@ class LicenseManager:
             "expires_at": license_record.expires_at,
             "max_devices": license_record.max_devices,
             "days_remaining": days_remaining,
+            "in_grace_period": in_grace_period,
+            "expiry_alert_level": expiry_alert_level,
             "message": message,
         }
 

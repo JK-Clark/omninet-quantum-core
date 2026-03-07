@@ -84,6 +84,8 @@ class LicenseStatusResponse(BaseModel):
     expires_at: Optional[datetime.datetime]
     max_devices: Optional[int]
     days_remaining: Optional[int]
+    in_grace_period: bool = False
+    expiry_alert_level: str = "ok"  # "ok" | "warning" | "critical" | "grace" | "expired"
     message: Optional[str] = None
 
 

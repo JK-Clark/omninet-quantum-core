@@ -61,6 +61,10 @@ export interface LicenseStatus {
   expires_at: string | null;
   max_devices: number | null;
   days_remaining: number | null;
+  in_grace_period: boolean;
+  /** One of: "ok" | "warning" | "critical" | "grace" | "expired" */
+  expiry_alert_level: string;
+  message: string | null;
 }
 
 export interface PredictionData {

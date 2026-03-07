@@ -96,12 +96,29 @@ export default function LicenseManager(): JSX.Element {
               {status.days_remaining !== null && (
                 <div>
                   <p className="text-xs text-gray-500">Remaining</p>
-                  <p className="font-semibold text-yellow-400">
+                  <p className={`font-semibold ${
+                    status.expiry_alert_level === 'critical' ? 'text-red-400' :
+                    status.expiry_alert_level === 'grace' ? 'text-red-500' :
+                    status.expiry_alert_level === 'warning' ? 'text-yellow-400' :
+                    'text-gray-200'
+                  }`}>
                     {t('license.days_remaining', { days: String(status.days_remaining) })}
                   </p>
                 </div>
               )}
             </div>
+            {/* Renewal message from backend */}
+            {status.message && (
+              <div className={`mt-4 rounded-lg px-4 py-3 text-sm font-medium ${
+                status.expiry_alert_level === 'expired'
+                  ? 'bg-red-950 border border-red-700 text-red-200'
+                  : status.expiry_alert_level === 'grace' || status.expiry_alert_level === 'critical'
+                  ? 'bg-red-900/60 border border-red-600 text-red-100'
+                  : 'bg-amber-900/50 border border-amber-600 text-amber-200'
+              }`}>
+                {status.message}
+              </div>
+            )}
           </div>
         )}
 
