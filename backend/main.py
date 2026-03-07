@@ -71,6 +71,8 @@ from schemas import (
     PredictionResponse,
     ReportGenerateRequest,
     ReportStatusResponse,
+    ServerHealthRequest,
+    ServerHealthResponse,
     TokenResponse,
     TopologyLinkOut,
     TopologyMapResponse,
@@ -122,6 +124,18 @@ def _get_discovery_engine() -> Any:
     import importlib
     nd = importlib.import_module("network_drivers")
     return nd.NetworkDiscoveryEngine()
+
+
+def _get_server_health_collector() -> Any:
+    """Dynamically import and return :class:`ServerHealthCollector`.
+
+    Same Code Interlocking principle as :func:`_get_discovery_engine` — the
+    BMC/OOB health-collection code (Redfish HTTP + SNMP) is only loaded into
+    memory after the license feature gate has been validated.
+    """
+    import importlib
+    nd = importlib.import_module("network_drivers")
+    return nd.ServerHealthCollector()
 
 
 
@@ -565,6 +579,63 @@ def report_scheduler_status(
         ),
         lang=os.environ.get("REPORT_LANGUAGE", "EN"),
         generated_at=datetime.datetime.utcnow(),
+    ).model_dump())
+
+
+# ─── Server Health (Redfish / SNMP) ──────────────────────────────────────────
+
+@app.post("/api/health/server", response_model=APIResponse)
+def server_health(
+    payload: ServerHealthRequest,
+    _user: User = Depends(current_user_dep),
+    lm: LicenseManager = Depends(get_license_manager),
+) -> APIResponse:
+    """Collect BMC / OOB health metrics from a server via Redfish or SNMP.
+
+    * ``idrac`` / ``ilo`` — uses Redfish v1 REST over HTTPS (requires ``username``
+      and ``password``).
+    * ``imm`` — uses SNMP v2c (IBM/Lenovo IMM; requires ``snmp_community`` — default
+      ``"public"``).
+
+    Feature gate: BANK tier required.
+    """
+    lm.check_feature_access("server_health")
+    # Code Interlocking — loaded only after license gate above.
+    collector = _get_server_health_collector()
+
+    if payload.bmc_type in ("idrac", "ilo"):
+        if not payload.username or not payload.password:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error_code": "MISSING_CREDENTIALS",
+                    "message": "username and password are required for Redfish (idrac/ilo).",
+                },
+            )
+        result = collector.get_redfish_health(
+            ip=payload.ip_address,
+            username=payload.username,
+            password=payload.password,
+            bmc_type=payload.bmc_type,
+        )
+    else:  # imm
+        result = collector.get_snmp_health(
+            ip=payload.ip_address,
+            community=payload.snmp_community or "public",
+        )
+
+    return APIResponse(data=ServerHealthResponse(
+        ip_address=payload.ip_address,
+        bmc_type=payload.bmc_type,
+        overall_health=result.get("overall_health", "Unknown"),
+        system_model=result.get("system_model"),
+        serial_number=result.get("serial_number"),
+        firmware_version=result.get("firmware_version"),
+        power_supplies=result.get("power_supplies", []),
+        fans=result.get("fans", []),
+        temperatures=result.get("temperatures", []),
+        drives=result.get("drives", []),
+        raw=result,
     ).model_dump())
 
 

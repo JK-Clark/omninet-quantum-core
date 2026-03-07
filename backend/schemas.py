@@ -173,3 +173,40 @@ class APIError(BaseModel):
     status: str = "error"
     error_code: str
     message: str
+
+
+# ─── Server Health (Redfish / SNMP) ──────────────────────────────────────────
+
+class ServerHealthRequest(BaseModel):
+    ip_address: str = Field(..., description="BMC / OOB management IP address.")
+    bmc_type: str = Field(
+        ...,
+        description="BMC type: 'idrac' (Dell iDRAC), 'ilo' (HP iLO), or 'imm' (IBM/Lenovo — SNMP).",
+        pattern="^(idrac|ilo|imm)$",
+    )
+    username: Optional[str] = Field(
+        default=None,
+        description="BMC username (required for Redfish idrac/ilo).",
+    )
+    password: Optional[str] = Field(
+        default=None,
+        description="BMC password (required for Redfish idrac/ilo).",
+    )
+    snmp_community: Optional[str] = Field(
+        default="public",
+        description="SNMP community string (used only for bmc_type='imm').",
+    )
+
+
+class ServerHealthResponse(BaseModel):
+    ip_address: str
+    bmc_type: str
+    overall_health: str
+    system_model: Optional[str] = None
+    serial_number: Optional[str] = None
+    firmware_version: Optional[str] = None
+    power_supplies: List[Dict[str, Any]] = Field(default_factory=list)
+    fans: List[Dict[str, Any]] = Field(default_factory=list)
+    temperatures: List[Dict[str, Any]] = Field(default_factory=list)
+    drives: List[Dict[str, Any]] = Field(default_factory=list)
+    raw: Dict[str, Any] = Field(default_factory=dict)

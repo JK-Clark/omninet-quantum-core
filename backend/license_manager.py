@@ -78,6 +78,8 @@ _FEATURE_TIERS: dict[str, set[str]] = {
     "basic_topology": {"TRIAL", "COMMUNITY", "BANK"},
     "alerts": {"COMMUNITY", "BANK"},
     "priority_support": {"BANK"},
+    "server_health": {"BANK"},
+    "audit_report": {"BANK"},
 }
 
 # Tolerance window used when comparing utcnow() against last_checked_at for
