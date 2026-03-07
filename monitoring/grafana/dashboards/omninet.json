@@ -1,0 +1,103 @@
+{
+  "title": "OmniNet Quantum-Core",
+  "uid": "omninet-main",
+  "version": 1,
+  "schemaVersion": 39,
+  "refresh": "15s",
+  "time": { "from": "now-3h", "to": "now" },
+  "tags": ["omninet", "network"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP Request Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{job=\"fastapi-backend\"}[2m])",
+          "legendFormat": "{{method}} {{handler}} {{status_code}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "mode": "palette-classic" } }
+      }
+    },
+    {
+      "id": 2,
+      "title": "HTTP Error Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{job=\"fastapi-backend\",status_code=~\"5..\"}[2m])",
+          "legendFormat": "5xx errors"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "fixedColor": "#ef4444", "mode": "fixed" } }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Active Devices",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "omninet_active_devices",
+          "legendFormat": "Devices"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "fixedColor": "#0ea5e9", "mode": "fixed" } }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Failure Predictions (last 1h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 },
+      "targets": [
+        {
+          "expr": "increase(omninet_failure_predictions_total[1h])",
+          "legendFormat": "Predictions"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "fixedColor": "#ef4444", "mode": "fixed" } }
+      }
+    },
+    {
+      "id": 5,
+      "title": "License Tier",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "omninet_license_tier",
+          "legendFormat": "Tier"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "fixedColor": "#8b5cf6", "mode": "fixed" } }
+      }
+    },
+    {
+      "id": 6,
+      "title": "API Latency P95",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"fastapi-backend\"}[2m]))",
+          "legendFormat": "p95 {{handler}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "color": { "mode": "palette-classic" } }
+      }
+    }
+  ],
+  "templating": { "list": [] },
+  "annotations": { "list": [] }
+}
