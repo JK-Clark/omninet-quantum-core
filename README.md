@@ -126,12 +126,15 @@ Language is selectable from the UI (persisted in localStorage):
 
 ## Supported Network Vendors
 
-| Vendor      | Device Type     | Protocol   |
-|-------------|-----------------|------------|
-| Cisco       | `cisco_ios`     | LLDP + CDP |
-| Cisco NX-OS | `cisco_nxos`    | LLDP + CDP |
-| Arista      | `arista_eos`    | LLDP       |
-| Juniper     | `juniper_junos` | LLDP       |
+| Vendor           | Device Type       | Protocol          |
+|------------------|-------------------|-------------------|
+| Cisco IOS        | `cisco_ios`       | LLDP + CDP        |
+| Cisco NX-OS      | `cisco_nxos`      | LLDP + CDP        |
+| Arista EOS       | `arista_eos`      | LLDP              |
+| Juniper JunOS    | `juniper_junos`   | LLDP              |
+| Fortinet FortiOS | `fortinet`        | LLDP (SSH)        |
+| Palo Alto PAN-OS | `paloalto_panos`  | LLDP (SSH)        |
+| Checkpoint Gaia  | `checkpoint_gaia` | LLDP (SSH)        |
 
 ---
 
@@ -142,6 +145,74 @@ Language is selectable from the UI (persisted in localStorage):
 - [ ] Multi-tenant enterprise mode with RBAC
 - [ ] Kubernetes Helm chart deployment
 - [ ] REST API v2 with GraphQL gateway
+
+---
+
+## Troubleshooting
+
+### Docker Deployment
+
+**Containers fail to start — `db` unhealthy**
+
+The PostgreSQL container may not have finished initialising before the backend tries to connect.
+```bash
+docker-compose logs db
+```
+If another process is already bound to port 5432, stop it or specify a different host port in `DATABASE_URL`.
+
+**`backend` exits with `FATAL: password authentication failed`**
+
+The password in `POSTGRES_PASSWORD` must exactly match the one embedded in `DATABASE_URL`.  After any credential change, tear down and recreate the named volume:
+```bash
+docker-compose down -v
+docker-compose up --build -d
+```
+
+**`backend` cannot reach Redis**
+
+Verify `REDIS_URL=redis://redis:6379/0` in your `.env` and check the Redis container health:
+```bash
+docker-compose ps redis
+docker-compose logs redis
+```
+
+**Port 80 or 443 already in use**
+
+Override the host ports in `.env` before starting:
+```
+HTTP_PORT=8080
+HTTPS_PORT=8443
+```
+Then restart: `docker-compose up -d`.
+
+**Frontend shows a blank page or API calls return 502**
+
+Inspect the Nginx and backend logs for the root cause:
+```bash
+docker-compose logs nginx
+docker-compose logs backend
+```
+When running behind an upstream reverse proxy, ensure `X-Forwarded-For` and `X-Forwarded-Proto` headers are forwarded to Nginx.
+
+**Grafana dashboard is empty / Prometheus datasource is missing**
+
+Confirm that both provisioning mounts are present and contain the expected files:
+```bash
+docker-compose exec grafana ls /etc/grafana/provisioning/datasources/
+docker-compose exec grafana ls /etc/grafana/provisioning/dashboards/
+```
+You should see `datasources.yaml` and `dashboards.yaml` respectively.  If the files are missing, verify the volume paths in `docker-compose.yml`.
+
+**SSL / TLS (HTTPS) setup**
+
+Place your certificate chain and private key in `nginx/certs/` as `fullchain.pem` and `privkey.pem`, then uncomment the TLS listener block in `nginx/nginx.conf` and restart the Nginx container.
+
+**Resetting all persistent data**
+
+```bash
+docker-compose down -v      # removes all named volumes (DB, models, Grafana, …)
+docker-compose up --build -d
+```
 
 ---
 

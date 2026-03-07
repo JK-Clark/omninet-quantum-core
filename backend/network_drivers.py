@@ -1,7 +1,8 @@
 """
 Netmiko-based network auto-discovery engine.
 
-Supports: Cisco IOS, Cisco NX-OS, Arista EOS, Juniper JunOS.
+Supports: Cisco IOS, Cisco NX-OS, Arista EOS, Juniper JunOS,
+          Fortinet FortiOS, Palo Alto PAN-OS, Checkpoint Gaia.
 Performs BFS topology crawl using LLDP / CDP neighbor tables.
 """
 
@@ -57,6 +58,23 @@ _CDP_BLOCK_PATTERN = re.compile(
     re.DOTALL,
 )
 
+# Fortinet `get system lldp neighbors-detail` block pattern
+_FORTI_LLDP_PATTERN = re.compile(
+    r"Interface\s*:\s*(?P<local_port>\S+).*?"
+    r"Port ID\s*:\s*(?P<remote_port>\S+).*?"
+    r"System Name\s*:\s*(?P<hostname>\S+).*?"
+    r"Management Address\s*:\s*(?P<ip>\d{1,3}(?:\.\d{1,3}){3})",
+    re.DOTALL,
+)
+
+# Palo Alto `show lldp neighbors` tabular line pattern
+# Columns: local-port  remote-chassis-id  remote-port-id  remote-port-desc  remote-system-name  mgmt-addr
+_PANOS_LLDP_LINE = re.compile(
+    r"^(?P<local_port>\S+)\s+\S+\s+(?P<remote_port>\S+)\s+\S+\s+(?P<hostname>\S+)\s+(?P<ip>\d{1,3}(?:\.\d{1,3}){3})",
+)
+
+# Checkpoint Gaia `show lldp neighbors` uses LLDP standard format; reuse _LLDP_PATTERN
+
 _VERSION_PATTERNS: Dict[str, re.Pattern] = {
     "cisco_ios": re.compile(
         r"Cisco IOS.*?Version\s+(?P<version>\S+).*?hostname\s+(?P<hostname>\S+)",
@@ -72,6 +90,18 @@ _VERSION_PATTERNS: Dict[str, re.Pattern] = {
     ),
     "juniper_junos": re.compile(
         r"Junos:\s*(?P<version>\S+).*?Hostname:\s*(?P<hostname>\S+)",
+        re.DOTALL,
+    ),
+    "fortinet": re.compile(
+        r"Version:\s*FortiGate-\S+\s+(?P<version>\S+).*?Hostname:\s*(?P<hostname>\S+)",
+        re.DOTALL,
+    ),
+    "paloalto_panos": re.compile(
+        r"hostname:\s*(?P<hostname>\S+).*?sw-version:\s*(?P<version>\S+)",
+        re.DOTALL,
+    ),
+    "checkpoint_gaia": re.compile(
+        r"Product version\s+(?P<version>\S+).*?Hostname:\s*(?P<hostname>\S+)",
         re.DOTALL,
     ),
 }
@@ -234,14 +264,67 @@ class NetworkDiscoveryEngine:
             except Exception:
                 pass
 
+        elif device_type == "fortinet":
+            try:
+                lldp_out = net_connect.send_command("get system lldp neighbors-detail")
+                for m in _FORTI_LLDP_PATTERN.finditer(lldp_out):
+                    neighbors.append(
+                        NeighborInfo(
+                            local_port=m.group("local_port"),
+                            remote_hostname=m.group("hostname"),
+                            remote_ip=m.group("ip"),
+                            remote_port=m.group("remote_port"),
+                        )
+                    )
+            except Exception:
+                pass
+
+        elif device_type == "paloalto_panos":
+            try:
+                lldp_out = net_connect.send_command("show lldp neighbors")
+                for line in lldp_out.splitlines():
+                    m = _PANOS_LLDP_LINE.match(line.strip())
+                    if m:
+                        neighbors.append(
+                            NeighborInfo(
+                                local_port=m.group("local_port"),
+                                remote_hostname=m.group("hostname"),
+                                remote_ip=m.group("ip"),
+                                remote_port=m.group("remote_port"),
+                            )
+                        )
+            except Exception:
+                pass
+
+        elif device_type == "checkpoint_gaia":
+            try:
+                lldp_out = net_connect.send_command("show lldp neighbors detail")
+                for m in _LLDP_PATTERN.finditer(lldp_out):
+                    neighbors.append(
+                        NeighborInfo(
+                            local_port=m.group("local_port"),
+                            remote_hostname=m.group("hostname"),
+                            remote_ip=m.group("ip"),
+                            remote_port=m.group("remote_port"),
+                            capability=m.group("capability").strip(),
+                        )
+                    )
+            except Exception:
+                pass
+
         return neighbors
 
     @staticmethod
     def _parse_inventory(
         net_connect: Any, ip: str, device_type: str
     ) -> DeviceInventory:
-        show_ver_cmd = "show version"
-        if device_type == "juniper_junos":
+        if device_type == "fortinet":
+            show_ver_cmd = "get system status"
+        elif device_type == "paloalto_panos":
+            show_ver_cmd = "show system info"
+        elif device_type == "checkpoint_gaia":
+            show_ver_cmd = "show version all"
+        else:
             show_ver_cmd = "show version"
 
         output = ""
@@ -288,6 +371,48 @@ class NetworkDiscoveryEngine:
             m = re.search(r"Junos:\s*(\S+)", output)
             if m:
                 version = m.group(1)
+
+        elif device_type == "fortinet":
+            vendor = "Fortinet"
+            # `get system status` output: "Version: FortiGate-100E v6.4.5,build1828,210318 (GA)"
+            m = re.search(r"Version:\s*(FortiGate-\S+)\s+(\S+)", output)
+            if m:
+                platform = m.group(1)
+                # Strip optional build/date suffix (e.g. "v6.4.5,build1828" → "v6.4.5")
+                raw_ver = m.group(2)
+                version = raw_ver.split(",")[0] if "," in raw_ver else raw_ver
+            m = re.search(r"Hostname:\s*(\S+)", output)
+            if m:
+                hostname = m.group(1)
+            m = re.search(r"Serial-Number:\s*(\S+)", output)
+            if m:
+                serial = m.group(1)
+
+        elif device_type == "paloalto_panos":
+            vendor = "Palo Alto"
+            # `show system info` output
+            m = re.search(r"^hostname:\s*(\S+)", output, re.MULTILINE)
+            if m:
+                hostname = m.group(1)
+            m = re.search(r"^sw-version:\s*(\S+)", output, re.MULTILINE)
+            if m:
+                version = m.group(1)
+            m = re.search(r"^model:\s*(.+)", output, re.MULTILINE)
+            if m:
+                platform = m.group(1).strip()
+            m = re.search(r"^serial:\s*(\S+)", output, re.MULTILINE)
+            if m:
+                serial = m.group(1)
+
+        elif device_type == "checkpoint_gaia":
+            vendor = "Checkpoint"
+            # `show version all` output: "Product version Check Point Gaia R81.10"
+            m = re.search(r"Product version\s+(.+)", output)
+            if m:
+                version = m.group(1).strip()
+            m = re.search(r"Hostname:\s*(\S+)", output, re.IGNORECASE)
+            if m:
+                hostname = m.group(1)
 
         return DeviceInventory(
             hostname=hostname,
