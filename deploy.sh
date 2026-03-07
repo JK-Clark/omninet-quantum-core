@@ -1,4 +1,2 @@
 #!/bin/bash
-# Deployment script
-
-# Add your deployment commands here
+# Deployment script for OmniNet Quantum-Core
