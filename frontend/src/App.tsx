@@ -1,3 +1,5 @@
+// © 2021-2026 Jonathan Kamu / Genio Elite. All rights reserved.
+// Proprietary and confidential. Unauthorized reproduction or distribution is strictly prohibited.
 import React, {
   createContext,
   lazy,
@@ -46,6 +48,24 @@ function PageLoader(): JSX.Element {
     <div className="flex h-screen items-center justify-center">
       <div className="h-12 w-12 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
     </div>
+  );
+}
+
+
+// ─── Copyright footer ─────────────────────────────────────────────────────────
+
+const COPYRIGHT_START_YEAR = 2021;
+
+function CopyrightFooter(): JSX.Element {
+  const currentYear = new Date().getFullYear();
+  const yearRange = currentYear === COPYRIGHT_START_YEAR
+    ? String(COPYRIGHT_START_YEAR)
+    : `${COPYRIGHT_START_YEAR}–${currentYear}`;
+  return (
+    <footer className="fixed bottom-0 left-0 right-0 z-50 bg-gray-900 py-1 text-center text-xs text-gray-400 select-none">
+      © {yearRange} Jonathan Kamu / Genio Elite — All rights reserved.
+      Proprietary software — unauthorized reproduction or distribution is strictly prohibited.
+    </footer>
   );
 }
 
@@ -104,6 +124,7 @@ export default function App(): JSX.Element {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
+        <CopyrightFooter />
       </BrowserRouter>
     </LangContext.Provider>
   );

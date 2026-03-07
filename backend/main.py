@@ -1,3 +1,5 @@
+# © 2021-2026 Jonathan Kamu / Genio Elite. All rights reserved.
+# Proprietary and confidential. Unauthorized reproduction or distribution is strictly prohibited.
 """
 OmniNet Quantum-Core — FastAPI application entrypoint.
 
@@ -51,9 +53,9 @@ from sqlalchemy.orm import Session
 
 from ai_predictor import FailurePredictor, get_predictor
 from database import get_db, init_db, settings
+from integrity import verify_integrity
 from license_manager import LicenseManager, get_license_manager, require_feature
 from models import Device, TopologyLink, User
-from network_drivers import NetworkDiscoveryEngine
 from quantum_engine import get_quantum_keypair
 from reports_engine import ReportEngine, ReportScheduler, build_report_data
 from schemas import (
@@ -75,10 +77,54 @@ from schemas import (
     UserCreate,
     UserOut,
 )
+# NOTE: network_drivers is intentionally NOT imported at module level.
+# Code Interlocking: this prevents the driver code (which includes SSH
+# credentials handling and multi-vendor CLI interfaces) from being loaded
+# into memory on an unlicensed instance.  The module is imported dynamically
+# inside _get_discovery_engine() ONLY after the license feature gate has been
+# passed, ensuring the code never executes — or occupies memory — unless the
+# instance holds a valid, active license.  Even if an attacker bypasses the
+# API layer, the code simply is not present in the Python module registry.
 
 logger = logging.getLogger(__name__)
 
-# ─── Auth helpers ─────────────────────────────────────────────────────────────
+# ─── Legal disclaimer (printed once at startup) ───────────────────────────────
+
+_LEGAL_BANNER = """
+╔══════════════════════════════════════════════════════════════════════════════╗
+║          GENIO ELITE PROPRIETARY SOFTWARE — CONFIDENTIAL                   ║
+║                                                                              ║
+║  © 2021-2026 Jonathan Kamu / Genio Elite. All rights reserved.              ║
+║  This software is the exclusive property of Genio Elite.                    ║
+║  Unauthorized use, reproduction, or distribution is strictly prohibited     ║
+║  and may result in severe civil and criminal penalties.                      ║
+║                                                                              ║
+║  Authorized support: support@genioelite.io  |  https://www.genioelite.io    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+"""
+
+
+def _print_legal_banner() -> None:
+    print(_LEGAL_BANNER, flush=True)
+    logger.info("[Genio Elite] Proprietary software banner displayed.")
+
+
+# ─── Code Interlocking — deferred import of discovery engine ─────────────────
+
+def _get_discovery_engine() -> Any:
+    """Dynamically import and return :class:`NetworkDiscoveryEngine`.
+
+    This function is the single entry-point for loading the network-discovery
+    module.  It is called *only* from endpoints that have already passed the
+    license feature gate, ensuring that the driver code is never loaded into
+    memory on an unlicensed instance (Code Interlocking).
+    """
+    import importlib
+    nd = importlib.import_module("network_drivers")
+    return nd.NetworkDiscoveryEngine()
+
+
+
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -141,6 +187,8 @@ _report_scheduler = ReportScheduler(get_db)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
+    _print_legal_banner()
+    verify_integrity()
     init_db()
     # Pre-generate the server quantum keypair on startup
     get_quantum_keypair()
@@ -311,7 +359,10 @@ def discover_topology(
     lm: LicenseManager = Depends(get_license_manager),
 ) -> APIResponse:
     lm.check_feature_access("basic_topology")
-    engine = NetworkDiscoveryEngine()
+    # Code Interlocking: network_drivers is loaded dynamically AFTER the
+    # license gate above.  On an unlicensed instance this line is never reached
+    # and the driver module is never imported into memory.
+    engine = _get_discovery_engine()
     credentials = {
         "username": payload.username,
         "password": payload.password,

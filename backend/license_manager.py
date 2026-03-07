@@ -1,3 +1,5 @@
+# © 2021-2026 Jonathan Kamu / Genio Elite. All rights reserved.
+# Proprietary and confidential. Unauthorized reproduction or distribution is strictly prohibited.
 """
 License management: hardware-locked tier validation, Ed25519 signature
 verification, mandatory-expiry enforcement, anti-fraud clock-rollback

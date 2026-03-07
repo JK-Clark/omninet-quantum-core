@@ -1,3 +1,5 @@
+# © 2021-2026 Jonathan Kamu / Genio Elite. All rights reserved.
+# Proprietary and confidential. Unauthorized reproduction or distribution is strictly prohibited.
 import datetime
 from typing import Any, Dict, Optional
 

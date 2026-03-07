@@ -1,3 +1,5 @@
+# © 2021-2026 Jonathan Kamu / Genio Elite. All rights reserved.
+# Proprietary and confidential. Unauthorized reproduction or distribution is strictly prohibited.
 """
 OmniNet Quantum-Core — Professional PDF Report Engine.
 
@@ -44,6 +46,22 @@ from typing import Any, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # ─── i18n string tables ───────────────────────────────────────────────────────
+
+# ─── Copyright constants ──────────────────────────────────────────────────────
+_COPYRIGHT_START_YEAR = 2021
+_COPYRIGHT_OWNER = "Jonathan Kamu / Genio Elite"
+
+
+def _copyright_line() -> str:
+    """Return a dynamic copyright string covering the start year through the current year."""
+    current_year = datetime.datetime.now(datetime.timezone.utc).year
+    year_range = (
+        str(_COPYRIGHT_START_YEAR)
+        if current_year == _COPYRIGHT_START_YEAR
+        else f"{_COPYRIGHT_START_YEAR}–{current_year}"
+    )
+    return f"© {year_range} {_COPYRIGHT_OWNER}"
+
 
 # Each key maps to a dict of language → translated string.
 _I18N: Dict[str, Dict[str, str]] = {
@@ -468,6 +486,13 @@ class ReportEngine:
         c.setFont("Helvetica-Oblique", 7)
         c.drawString(m, 20, _t("confidential", lang))
         c.drawRightString(w - m, 20, f"{page_num} / 4")
+        # Proprietary marking centred in the footer
+        c.setFillColorRGB(*self._BLUE_DARK)
+        c.setFont("Helvetica-Bold", 7)
+        c.drawCentredString(
+            w / 2, 20,
+            f"Document confidentiel — Propriété de Genio Elite  |  {_copyright_line()}",
+        )
         # Thin rule above footer
         c.setStrokeColorRGB(*self._GREY_MID)
         c.setLineWidth(0.5)

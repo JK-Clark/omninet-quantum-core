@@ -1,3 +1,5 @@
+// © 2021-2026 Jonathan Kamu / Genio Elite. All rights reserved.
+// Proprietary and confidential. Unauthorized reproduction or distribution is strictly prohibited.
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

@@ -1,0 +1,173 @@
+OMNINET QUANTUM-CORE — PROPRIETARY SOFTWARE LICENSE AGREEMENT (EULA)
+Version 1.0 — Effective Date: 2021-01-01
+
+Copyright © 2021–2026 Jonathan Kamu / Genio Elite. All rights reserved.
+
+───────────────────────────────────────────────────────────────────────────────
+IMPORTANT — READ CAREFULLY BEFORE INSTALLING OR USING THIS SOFTWARE
+───────────────────────────────────────────────────────────────────────────────
+
+This End-User License Agreement ("Agreement") is a legally binding contract
+between you (an individual or a legal entity, hereinafter "Licensee") and
+Jonathan Kamu / Genio Elite ("Licensor") for the use of OmniNet Quantum-Core
+software and all associated documentation, data, and configuration files
+(collectively, the "Software").
+
+BY INSTALLING, COPYING, DOWNLOADING, OR OTHERWISE USING THE SOFTWARE, YOU
+ACKNOWLEDGE THAT YOU HAVE READ THIS AGREEMENT, UNDERSTAND IT, AND AGREE TO BE
+BOUND BY ITS TERMS AND CONDITIONS.  IF YOU DO NOT AGREE, DO NOT INSTALL OR
+USE THE SOFTWARE AND DESTROY ALL COPIES IN YOUR POSSESSION.
+
+───────────────────────────────────────────────────────────────────────────────
+ARTICLE 1 — GRANT OF LICENSE
+───────────────────────────────────────────────────────────────────────────────
+
+1.1  Subject to the terms of this Agreement and payment of the applicable
+     license fee, Licensor grants Licensee a limited, non-exclusive,
+     non-transferable, non-sublicensable right to install and use one (1)
+     instance of the Software on a single hardware system uniquely identified
+     by the Hardware ID fingerprint embedded in the activated license key
+     ("Licensed Hardware").
+
+1.2  This license is personal to the Licensee.  Any transfer of the Software
+     or any of the rights granted herein to a third party requires the prior
+     written consent of Licensor.
+
+───────────────────────────────────────────────────────────────────────────────
+ARTICLE 2 — RESTRICTIONS
+───────────────────────────────────────────────────────────────────────────────
+
+2.1  SINGLE HARDWARE ID BINDING.  The Software is cryptographically locked to
+     the Hardware ID of the Licensed Hardware.  Activation on any other
+     hardware requires a new license key issued by Genio Elite.
+
+2.2  NO REVERSE ENGINEERING.  Licensee shall not, and shall not permit any
+     third party to: (a) reverse-engineer, disassemble, decompile, decrypt,
+     or otherwise attempt to derive the source code, algorithms, or trade
+     secrets of the Software; (b) circumvent or disable any technical
+     protection measures, including but not limited to the license validation
+     system, hardware binding, integrity checks, or cryptographic controls;
+     (c) remove, alter, or obscure any proprietary notices, copyright legends,
+     trademarks, or labels on the Software or its output.
+
+2.3  NO REDISTRIBUTION.  Licensee shall not copy, distribute, sell, resell,
+     sublicense, rent, lease, lend, or otherwise transfer the Software or any
+     portion thereof to any third party.
+
+2.4  NO MODIFICATION.  Licensee shall not modify, adapt, translate, or create
+     derivative works based upon the Software.
+
+2.5  NO PARALLEL INSTANCES.  The license covers exactly one running instance
+     per activated Hardware ID at any given time.
+
+───────────────────────────────────────────────────────────────────────────────
+ARTICLE 3 — INTELLECTUAL PROPERTY
+───────────────────────────────────────────────────────────────────────────────
+
+3.1  The Software, including all copies, modifications, and derivative works,
+     is and shall remain the exclusive intellectual property of Jonathan Kamu /
+     Genio Elite.  This Agreement does not convey any ownership interest.
+
+3.2  All trademarks, service marks, trade names, logos, and trade dress
+     associated with OmniNet Quantum-Core and Genio Elite are the property of
+     Licensor and may not be used without prior written permission.
+
+───────────────────────────────────────────────────────────────────────────────
+ARTICLE 4 — SUPPORT AND MAINTENANCE
+───────────────────────────────────────────────────────────────────────────────
+
+4.1  Technical support, bug fixes, updates, and upgrades are provided
+     exclusively by Genio Elite.  Licensee shall not seek or accept support
+     from any third party.
+
+4.2  Support is available to Licensees with an active license subscription.
+     Contact: support@genioelite.io
+
+───────────────────────────────────────────────────────────────────────────────
+ARTICLE 5 — CONFIDENTIALITY
+───────────────────────────────────────────────────────────────────────────────
+
+5.1  The Software and all documentation are confidential and proprietary
+     information of Licensor.  Licensee shall protect the confidentiality of
+     the Software with at least the same degree of care used to protect its
+     own confidential information, but in no event less than reasonable care.
+
+5.2  Reports and audit documents generated by the Software are marked
+     "CONFIDENTIEL — PROPRIÉTÉ DE GENIO ELITE" and may not be shared outside
+     the Licensee's organisation without removing all references to Genio Elite
+     and obtaining explicit written consent from Licensor.
+
+───────────────────────────────────────────────────────────────────────────────
+ARTICLE 6 — LICENSE TERM AND TERMINATION
+───────────────────────────────────────────────────────────────────────────────
+
+6.1  This Agreement commences on the date the Software is first activated and
+     continues until the expiry date embedded in the license key, unless
+     earlier terminated.
+
+6.2  Licensor may terminate this Agreement immediately upon written notice if
+     Licensee breaches any term of this Agreement.  Upon termination, Licensee
+     must immediately cease all use of the Software and destroy all copies.
+
+6.3  The Software will automatically enforce license expiry.  Continued use
+     after expiry without renewal constitutes a breach of this Agreement.
+
+───────────────────────────────────────────────────────────────────────────────
+ARTICLE 7 — DISCLAIMER OF WARRANTIES
+───────────────────────────────────────────────────────────────────────────────
+
+7.1  TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS
+     PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+     INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+     PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+───────────────────────────────────────────────────────────────────────────────
+ARTICLE 8 — LIMITATION OF LIABILITY
+───────────────────────────────────────────────────────────────────────────────
+
+8.1  IN NO EVENT SHALL LICENSOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL,
+     SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING OUT OF OR IN
+     CONNECTION WITH THIS AGREEMENT OR THE USE OF THE SOFTWARE, EVEN IF
+     LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+8.2  LICENSOR'S TOTAL CUMULATIVE LIABILITY SHALL NOT EXCEED THE LICENSE FEE
+     PAID BY LICENSEE IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM.
+
+───────────────────────────────────────────────────────────────────────────────
+ARTICLE 9 — COMPLIANCE WITH REGULATIONS
+───────────────────────────────────────────────────────────────────────────────
+
+9.1  The Software includes features designed to assist with regulatory
+     compliance (ISO 27001, PCI-DSS, RGPD/GDPR).  Licensor does not warrant
+     that use of the Software will result in or guarantee regulatory compliance.
+     Compliance audits and certifications remain the sole responsibility of the
+     Licensee.
+
+───────────────────────────────────────────────────────────────────────────────
+ARTICLE 10 — GOVERNING LAW AND JURISDICTION
+───────────────────────────────────────────────────────────────────────────────
+
+10.1 This Agreement shall be governed by and construed in accordance with the
+     laws of France, without regard to its conflict of law provisions.
+
+10.2 Any dispute arising out of or relating to this Agreement shall be subject
+     to the exclusive jurisdiction of the courts of Paris, France.
+
+───────────────────────────────────────────────────────────────────────────────
+ARTICLE 11 — ENTIRE AGREEMENT
+───────────────────────────────────────────────────────────────────────────────
+
+11.1 This Agreement constitutes the entire agreement between the parties with
+     respect to the Software and supersedes all prior agreements,
+     representations, and understandings.
+
+11.2 Amendments to this Agreement must be in writing and signed by an
+     authorized representative of Licensor.
+
+───────────────────────────────────────────────────────────────────────────────
+
+For licensing enquiries, renewals, or to report a violation:
+  Email : legal@genioelite.io
+  Web   : https://www.genioelite.io
+
+© 2021–2026 Jonathan Kamu / Genio Elite — All rights reserved.
