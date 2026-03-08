@@ -14,12 +14,21 @@
 
 ---
 
+## Prerequisites
+
+- **Docker** 24+
+- **Docker Compose** v2+
+- **Git**
+
+---
+
 ## Quick Start
 
 ```bash
 git clone https://github.com/JK-Clark/omninet-quantum-core.git
 cd omninet-quantum-core
-docker-compose up --build -d
+cp .env.example .env
+docker compose up --build -d
 ```
 
 Then open **http://localhost** and follow the 5-step setup wizard.
