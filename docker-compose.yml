@@ -60,7 +60,6 @@ services:
       dockerfile: Dockerfile
       target: production
     container_name: omninet-backend
-    mac_address: "02:42:ac:11:00:02"
     restart: unless-stopped
     env_file:
       - .env
@@ -100,7 +99,7 @@ services:
     networks:
       - omninet-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:80 || exit 1"]
       interval: 15s
       timeout: 3s
       retries: 3
