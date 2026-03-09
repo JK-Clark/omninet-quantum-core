@@ -38,7 +38,13 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const res = await apiClient.post('/auth/login', { email, password })
+      // OAuth2 requires application/x-www-form-urlencoded with `username` field
+      const formData = new URLSearchParams()
+      formData.append('username', email)
+      formData.append('password', password)
+      const res = await apiClient.post('/auth/login', formData, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      })
       login(res.data.token || res.data.access_token, res.data.user)
       navigate('/dashboard')
     } catch (err) {
