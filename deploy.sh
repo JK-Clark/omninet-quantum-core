@@ -190,7 +190,11 @@ wait_for_health() {
     sleep 5
   done
 
-  log_warn "Backend did not respond within expected time. Check logs with: docker-compose logs app"
+  if command -v docker-compose &>/dev/null; then
+    log_warn "Backend did not respond within expected time. Check logs with: docker-compose logs app"
+  else
+    log_warn "Backend did not respond within expected time. Check logs with: docker compose logs app"
+  fi
 }
 
 # ─── Main Entry Point ─────────────────────────────────────────────────────────
