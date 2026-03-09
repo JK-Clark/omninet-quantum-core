@@ -7,7 +7,10 @@ FROM python:3.12-slim AS builder
 WORKDIR /build
 
 COPY requirements.txt .
-RUN pip install --upgrade pip \
+# Enforce correct bcrypt version (wipe any preinstalled)
+RUN pip install --upgrade pip \ 
+    && pip uninstall -y bcrypt \ 
+    && pip install bcrypt==3.2.2 \ 
     && pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ── Stage 2: Production ───────────────────────────────────────────────────────
@@ -22,7 +25,7 @@ COPY --from=builder /install /usr/local
 COPY . .
 
 # Install curl for healthcheck
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+RUN apt-get update && apt-get install -y --no-install-recommends curl \ 
     && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 8000
