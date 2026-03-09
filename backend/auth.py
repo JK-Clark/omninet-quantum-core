@@ -31,8 +31,13 @@ if SECRET_KEY == _DEFAULT_SECRET:
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24h
 
-DEFAULT_ADMIN_EMAIL = "admin@omninet.local"
-DEFAULT_ADMIN_PASSWORD = "OmniNet2026!"
+DEFAULT_ADMIN_EMAIL = os.getenv("ADMIN_DEFAULT_EMAIL", "admin@omninet.local")
+DEFAULT_ADMIN_PASSWORD = os.getenv("ADMIN_DEFAULT_PASSWORD", "OmniNet2026!")
+if DEFAULT_ADMIN_PASSWORD == "OmniNet2026!":
+    logger.warning(
+        "ADMIN_DEFAULT_PASSWORD is set to the insecure default value. "
+        "Set the ADMIN_DEFAULT_PASSWORD environment variable before deploying to production."
+    )
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -90,6 +95,12 @@ def get_current_user(
 
 def ensure_default_admin(db: Session) -> None:
     """Create the default admin user if the users table is empty."""
+    # Block production startup with default credentials
+    if os.getenv("ENVIRONMENT", "production") == "production" and DEFAULT_ADMIN_PASSWORD == "OmniNet2026!":
+        raise RuntimeError(
+            "SECURITY: ADMIN_DEFAULT_PASSWORD is set to the insecure default value. "
+            "Set the ADMIN_DEFAULT_PASSWORD environment variable before deploying to production."
+        )
     if db.query(models.User).count() == 0:
         admin = models.User(
             email=DEFAULT_ADMIN_EMAIL,
