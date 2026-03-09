@@ -1,0 +1,87 @@
+# (c) 2021-2026 Jonathan Kamu / Genio Elite. Tous droits réservés.
+# .github/workflows/security.yml — OmniNet Quantum-Core Security Audits
+#
+# Triggered on every push to main AND weekly (Sunday 02:00 UTC).
+# Jobs: dependency-audit · npm-audit · secret-scan
+
+name: Security
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly on Sunday at 02:00 UTC
+    - cron: "0 2 * * 0"
+
+jobs:
+  # ── 1. Python dependency vulnerability audit ────────────────────────────────
+  dependency-audit:
+    name: Python Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit on backend requirements
+        run: |
+          pip-audit \
+            --requirement backend/requirements.txt \
+            --output pip-audit-report.json \
+            --format json \
+            || true
+          pip-audit \
+            --requirement backend/requirements.txt
+
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+          retention-days: 90
+
+  # ── 2. Node.js / NPM audit ─────────────────────────────────────────────────
+  npm-audit:
+    name: NPM Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate || true
+
+  # ── 3. Secret scanning (Gitleaks) ──────────────────────────────────────────
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}

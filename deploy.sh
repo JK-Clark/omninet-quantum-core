@@ -178,10 +178,10 @@ wait_for_health() {
   log_info "Waiting for backend API to be healthy..."
   local max_attempts=30
   local attempt=0
-  local backend_url="http://localhost/api/health"
+  local backend_url="https://localhost/api/health"
 
   while [ $attempt -lt $max_attempts ]; do
-    if curl -sf "$backend_url" &>/dev/null; then
+    if curl -sfk "$backend_url" &>/dev/null; then
       log_success "Backend API is responding at $backend_url"
       return 0
     fi
@@ -190,7 +190,11 @@ wait_for_health() {
     sleep 5
   done
 
-  log_warn "Backend did not respond within expected time. Check logs with: docker-compose logs app"
+  if command -v docker-compose &>/dev/null; then
+    log_warn "Backend did not respond within expected time. Check logs with: docker-compose logs app"
+  else
+    log_warn "Backend did not respond within expected time. Check logs with: docker compose logs app"
+  fi
 }
 
 # ─── Main Entry Point ─────────────────────────────────────────────────────────
@@ -204,14 +208,19 @@ main() {
   wait_for_health
 
   echo ""
-  echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════════════════╗${RESET}"
-  echo -e "${GREEN}${BOLD}║   ✅  OmniNet Quantum-Core est déployé sur http://localhost  ║${RESET}"
-  echo -e "${GREEN}${BOLD}║          Propriété de Genio Elite — Bonne utilisation !      ║${RESET}"
-  echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════════════════╝${RESET}"
+  echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════════════════════╗${RESET}"
+  echo -e "${GREEN}${BOLD}║   ✅  OmniNet Quantum-Core est déployé sur https://localhost     ║${RESET}"
+  echo -e "${GREEN}${BOLD}║          Propriété de Genio Elite — Bonne utilisation !          ║${RESET}"
+  echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════════════════════╝${RESET}"
   echo ""
+  echo -e "  ${CYAN}🔒 Frontend:${RESET}   https://localhost (HTTPS actif)"
   echo -e "  ${CYAN}📊 Grafana:${RESET}    http://localhost:3001"
-  echo -e "  ${CYAN}🔌 API Docs:${RESET}   http://localhost/api/docs"
-  echo -e "  ${CYAN}📡 API Base:${RESET}   http://localhost/api"
+  echo -e "  ${CYAN}🔌 API Docs:${RESET}   https://localhost/api/docs"
+  echo -e "  ${CYAN}📡 API Base:${RESET}   https://localhost/api"
+  echo ""
+  echo -e "  ${YELLOW}ℹ️  Certificat auto-signé utilisé en développement.${RESET}"
+  echo -e "  ${YELLOW}   Pour la production, montez de vrais certificats TLS.${RESET}"
+  echo -e "  ${YELLOW}   Voir SECURITY.md pour la procédure.${RESET}"
   echo ""
 }
 

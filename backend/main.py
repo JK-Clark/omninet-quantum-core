@@ -21,6 +21,7 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.security import OAuth2PasswordRequestForm
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -70,6 +71,33 @@ if PROMETHEUS_ENABLED:
     Instrumentator().instrument(app).expose(app)
 
 
+# ── Security Headers Middleware ───────────────────────────────────────────────
+_AUTH_PATH_PREFIX = "/api/auth/"
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next) -> Response:
+    """Inject OWASP-recommended security headers on every response."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self' ws: wss:;"
+    )
+    # Prevent caching of auth responses (PCI-DSS requirement)
+    if request.url.path.startswith(_AUTH_PATH_PREFIX):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
+
 # ── Dependencies ──────────────────────────────────────────────────────────────
 def require_admin(current_user: models.User = Depends(auth.get_current_user)) -> models.User:
     if not current_user.is_admin:
@@ -99,15 +127,24 @@ async def on_startup() -> None:
     finally:
         db.close()
 
-    # File integrity check — alert only, do not block startup
+    # File integrity check — generate manifest on first boot, verify on subsequent boots
     app_dir = Path(__file__).parent
     manifest_path = app_dir / "integrity_manifest.json"
-    tampered = integrity_check.verify_integrity(app_dir, manifest_path)
-    if tampered:
-        logger.critical(
-            "STARTUP INTEGRITY WARNING: The following critical files have been modified: %s",
-            tampered,
-        )
+    existing_manifest = integrity_check.load_manifest(manifest_path)
+    if not existing_manifest:
+        logger.info("STARTUP: No integrity manifest found — generating now...")
+        try:
+            integrity_check.generate_manifest(app_dir, manifest_path)
+            logger.info("STARTUP: Integrity manifest generated successfully.")
+        except Exception as exc:
+            logger.warning("STARTUP: Could not generate integrity manifest: %s", exc)
+    else:
+        tampered = integrity_check.verify_integrity(app_dir, manifest_path)
+        if tampered:
+            logger.critical(
+                "STARTUP INTEGRITY WARNING: The following critical files have been modified: %s",
+                tampered,
+            )
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -125,9 +162,17 @@ async def login(
 ):
     user = auth.authenticate_user(db, form_data.username, form_data.password)
     if not user:
+        # Generic message prevents user-enumeration (PCI-DSS 8.3.10 / OWASP)
+        audit.log_action(
+            db,
+            action="user.login_failed",
+            user_id=None,
+            ip_address=request.client.host if request.client else None,
+            details={"email": form_data.username},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Invalid credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = auth.create_access_token(data={"sub": user.email})

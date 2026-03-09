@@ -7,6 +7,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 
+import redis as _redis
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -31,9 +32,78 @@ if SECRET_KEY == _DEFAULT_SECRET:
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24h
 
-DEFAULT_ADMIN_EMAIL = "admin@omninet.local"
-DEFAULT_ADMIN_PASSWORD = "OmniNet2026!"
+# ── Admin credentials from environment ───────────────────────────────────────
+_DEFAULT_ADMIN_PASSWORD = "OmniNet2026!"
+DEFAULT_ADMIN_EMAIL = os.getenv("ADMIN_DEFAULT_EMAIL", "admin@omninet.local")
+DEFAULT_ADMIN_PASSWORD = os.getenv("ADMIN_DEFAULT_PASSWORD", _DEFAULT_ADMIN_PASSWORD)
 
+_environment = os.getenv("ENVIRONMENT", "production").lower()
+if DEFAULT_ADMIN_PASSWORD == _DEFAULT_ADMIN_PASSWORD and _environment not in ("test", "development"):
+    if _environment == "production":
+        raise RuntimeError(
+            "FATAL: ADMIN_DEFAULT_PASSWORD is set to the insecure default 'OmniNet2026!'. "
+            "Set ADMIN_DEFAULT_PASSWORD in your .env file before starting in production."
+        )
+    logger.warning(
+        "ADMIN_DEFAULT_PASSWORD is not set — using insecure default. "
+        "Change this before deploying to production."
+    )
+
+# ── Account lockout (Redis) ───────────────────────────────────────────────────
+_LOCKOUT_MAX_ATTEMPTS = 5
+_LOCKOUT_TTL_SECONDS = 15 * 60  # 15 minutes
+
+_redis_url = os.getenv("REDIS_URL", "")
+_redis_client: Optional[_redis.Redis] = None
+if _redis_url:
+    try:
+        _redis_client = _redis.Redis.from_url(_redis_url, decode_responses=True)
+        _redis_client.ping()
+    except Exception as exc:
+        logger.warning("auth: Redis unavailable — account lockout disabled: %s", exc)
+        _redis_client = None
+
+
+def _lockout_key(email: str) -> str:
+    return f"auth:lockout:{email}"
+
+
+def _is_account_locked(email: str) -> bool:
+    """Return True if the account is currently locked out."""
+    if _redis_client is None:
+        return False
+    try:
+        attempts = _redis_client.get(_lockout_key(email))
+        return attempts is not None and int(attempts) >= _LOCKOUT_MAX_ATTEMPTS
+    except Exception:
+        return False
+
+
+def _record_failed_attempt(email: str) -> int:
+    """Increment and return the failed attempt counter for *email*."""
+    if _redis_client is None:
+        return 0
+    try:
+        key = _lockout_key(email)
+        count = _redis_client.incr(key)
+        if count == 1:
+            _redis_client.expire(key, _LOCKOUT_TTL_SECONDS)
+        return count
+    except Exception:
+        return 0
+
+
+def _clear_failed_attempts(email: str) -> None:
+    """Clear the failed attempt counter on successful login."""
+    if _redis_client is None:
+        return
+    try:
+        _redis_client.delete(_lockout_key(email))
+    except Exception:
+        pass
+
+
+# ── Password utilities ────────────────────────────────────────────────────────
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -57,10 +127,28 @@ def get_user_by_email(db: Session, email: str) -> Optional[models.User]:
     return db.query(models.User).filter(models.User.email == email).first()
 
 
-def authenticate_user(db: Session, email: str, password: str) -> Optional[models.User]:
+def authenticate_user(
+    db: Session,
+    email: str,
+    password: str,
+) -> Optional[models.User]:
+    """Authenticate a user with lockout protection.
+
+    Returns None on failure (unknown email *or* wrong password) so callers
+    cannot distinguish the two cases — preventing user-enumeration attacks.
+    Also enforces an account lockout after :data:`_LOCKOUT_MAX_ATTEMPTS`
+    consecutive failures (TTL :data:`_LOCKOUT_TTL_SECONDS`).
+    """
+    if _is_account_locked(email):
+        logger.warning("auth: account locked out for email=%s", email)
+        return None
+
     user = get_user_by_email(db, email)
     if not user or not verify_password(password, user.hashed_password):
+        _record_failed_attempt(email)
         return None
+
+    _clear_failed_attempts(email)
     return user
 
 

@@ -1,8 +1,17 @@
 # OmniNet Quantum-Core
 
+[![CI](https://github.com/JK-Clark/omninet-quantum-core/actions/workflows/ci.yml/badge.svg)](https://github.com/JK-Clark/omninet-quantum-core/actions/workflows/ci.yml)
+[![Security](https://github.com/JK-Clark/omninet-quantum-core/actions/workflows/security.yml/badge.svg)](https://github.com/JK-Clark/omninet-quantum-core/actions/workflows/security.yml)
+[![DORA Compliant](https://img.shields.io/badge/DORA-compliant-blue)](SECURITY.md)
+[![PCI-DSS](https://img.shields.io/badge/PCI--DSS-v4.0-blue)](SECURITY.md)
+[![NIST FIPS 203](https://img.shields.io/badge/NIST%20FIPS%20203-Kyber--512-green)](SECURITY.md)
+
 ## Universal Network Orchestrator for Banking & SMEs
 
 OmniNet Quantum-Core is a cutting-edge, production-ready network management platform designed specifically for the banking sector and small-to-medium enterprises (SMEs). Leveraging advanced technologies like post-quantum cryptography, predictive AI, and automated topology discovery, it provides secure, intelligent, and scalable network orchestration with zero manual configuration.
+
+> **Compliance:** OmniNet Quantum-Core is designed to meet **DORA**, **PCI-DSS v4.0**, and **ISO 27001:2022** requirements.  
+> See [SECURITY.md](SECURITY.md) for the full security architecture and compliance details.
 
 ### Key Features
 
@@ -63,13 +72,33 @@ All services include health checks, named volumes for persistence, and environme
 
 3. Deploy with one command:
    ```bash
-   docker-compose up --build -d
+   ./deploy.sh
+   # or: docker compose up --build -d
    ```
 
 4. Access the application:
-   - **Frontend**: http://localhost
-   - **API Docs**: http://localhost/api/docs (Swagger UI)
-   - **Monitoring**: http://localhost:9090 (Prometheus), http://localhost:3000 (Grafana)
+   - **Frontend**: https://localhost (HTTPS — accept the self-signed certificate in dev)
+   - **API Docs**: https://localhost/api/docs (Swagger UI)
+   - **Monitoring**: http://localhost:3001 (Grafana)
+
+> **HTTPS is active by default.** Nginx automatically generates a self-signed certificate on first start.  
+> For production, mount real Let's Encrypt certificates — see `.env.example` and [SECURITY.md](SECURITY.md).
+
+### TLS / HTTPS in Production
+
+To use real certificates (e.g. Let's Encrypt via Certbot):
+
+```bash
+# 1. Obtain certs with Certbot
+certbot certonly --standalone -d yourdomain.com
+
+# 2. Add to docker-compose.yml nginx volumes:
+#    - /etc/letsencrypt/live/yourdomain.com/fullchain.pem:/etc/nginx/certs/server.crt:ro
+#    - /etc/letsencrypt/live/yourdomain.com/privkey.pem:/etc/nginx/certs/server.key:ro
+
+# 3. Restart nginx
+docker compose restart nginx
+```
 
 ### Configuration
 

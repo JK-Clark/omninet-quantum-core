@@ -14,6 +14,8 @@ volumes:
     driver: local
   grafana_data:
     driver: local
+  nginx_certs:
+    driver: local
 
 services:
 
@@ -111,9 +113,16 @@ services:
       dockerfile: Dockerfile
     container_name: omninet-nginx
     restart: unless-stopped
+    environment:
+      NGINX_CERT_DIR: ${NGINX_CERT_DIR:-/etc/nginx/certs}
     ports:
       - "80:80"
       - "443:443"
+    volumes:
+      # Mount real Let's Encrypt certs in production:
+      #   NGINX_CERT_DIR=/etc/nginx/certs
+      #   volumes: - /etc/letsencrypt/live/yourdomain.com:/etc/nginx/certs:ro
+      - nginx_certs:/etc/nginx/certs
     networks:
       - omninet-net
     depends_on:
