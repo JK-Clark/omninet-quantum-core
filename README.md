@@ -27,7 +27,7 @@ OmniNet Quantum-Core is a cutting-edge, production-ready network management plat
 - **Zero Configuration**: Automatically detects and maps network devices without manual input
 
 #### 🔒 Post-Quantum Security & AI-Powered Insights
-- **Cryptography**: Simulates Kyber-512 post-quantum encryption for AAA (Authentication, Authorization, Accounting)
+- **Cryptography**: CRYSTALS-Kyber-512 (NIST FIPS 203) post-quantum encryption for AAA (Authentication, Authorization, Accounting) via `kyber-py`
 - **Predictive AI**: Uses time-series analysis (scikit-learn + statsmodels) to anticipate network failures before they occur
 - **Proactive Monitoring**: Alerts and recommendations based on AI-driven predictions
 
