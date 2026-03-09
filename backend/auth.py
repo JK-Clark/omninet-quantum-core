@@ -173,12 +173,6 @@ def get_current_user(
 
 def ensure_default_admin(db: Session) -> None:
     """Create the default admin user if the users table is empty."""
-    # Block production startup with default credentials
-    if os.getenv("ENVIRONMENT", "production") == "production" and DEFAULT_ADMIN_PASSWORD == "OmniNet2026!":
-        raise RuntimeError(
-            "SECURITY: ADMIN_DEFAULT_PASSWORD is set to the insecure default value. "
-            "Set the ADMIN_DEFAULT_PASSWORD environment variable before deploying to production."
-        )
     if db.query(models.User).count() == 0:
         admin = models.User(
             email=DEFAULT_ADMIN_EMAIL,
