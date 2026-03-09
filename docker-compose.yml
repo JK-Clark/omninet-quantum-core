@@ -1,165 +1,18 @@
-# (c) 2021-2026 Jonathan Kamu / Genio Elite. Tous droits réservés.
-# docker-compose.yml — OmniNet Quantum-Core Stack Orchestration
-
-networks:
-  omninet-net:
-    driver: bridge
-
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-  prometheus_data:
-    driver: local
-  grafana_data:
-    driver: local
-
+version: '3'
 services:
-
-  # ─── PostgreSQL Database ───────────────────────────────────────────────────
-  db:
-    image: postgres:15-alpine
-    container_name: omninet-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-omninet}
-      POSTGRES_USER: ${POSTGRES_USER:-omninet}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_production}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - omninet-net
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-omninet} -d ${POSTGRES_DB:-omninet}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-
-  # ─── Redis Cache ──────────────────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    container_name: omninet-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secret}
-    volumes:
-      - redis_data:/data
-    networks:
-      - omninet-net
-    healthcheck:
-      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD:-redis_secret}", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
-  # ─── Backend API (FastAPI / Uvicorn) ──────────────────────────────────────
   app:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: production
-    container_name: omninet-backend
-    restart: unless-stopped
-    env_file:
-      - .env
+    image: my-app-image
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-omninet}:${POSTGRES_PASSWORD:-changeme_in_production}@db:5432/${POSTGRES_DB:-omninet}
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-CHANGE_THIS_TO_A_RANDOM_SECRET_KEY_64_CHARS}
       ENVIRONMENT: ${ENVIRONMENT:-production}
-    expose:
-      - "8000"
-    volumes:
-      - ./backend/integrity_manifest.json:/app/integrity_manifest.json:ro
-    networks:
-      - omninet-net
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 50s
-
-  # ─── Frontend (React / Vite — served via Nginx) ──────────────────────────
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: production
-    container_name: omninet-frontend
-    restart: unless-stopped
-    expose:
-      - "80"
-    networks:
-      - omninet-net
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:80 || exit 1"]
-      interval: 15s
-      timeout: 3s
-      retries: 3
-
-  # ─── Nginx Reverse Proxy ───────────────────────────────────────���─────────
-  nginx:
-    build:
-      context: ./nginx
-      dockerfile: Dockerfile
-    container_name: omninet-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    networks:
-      - omninet-net
-    depends_on:
-      app:
-        condition: service_healthy
-      frontend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "nginx", "-t"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # ─── Prometheus ──────────────────────────────────────────────────────────
-  prometheus:
-    image: prom/prometheus:v2.51.0
-    container_name: omninet-prometheus
-    restart: unless-stopped
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--web.enable-lifecycle'
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    expose:
-      - "9090"
-    networks:
-      - omninet-net
-
-  # ─── Grafana ─────────────────────────────────────────────────────────────
-  grafana:
-    image: grafana/grafana:10.4.1
-    container_name: omninet-grafana
-    restart: unless-stopped
+      ADMIN_DEFAULT_PASSWORD: Test123!
+  db:
+    image: postgres:latest
     environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
-      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-    ports:
-      - "3001:3000"
-    networks:
-      - omninet-net
-    depends_on:
-      - prometheus
+      POSTGRES_USER: omninet
+      POSTGRES_PASSWORD: changeme_in_production
+      POSTGRES_DB: omninet
+  redis:
+    image: redis:latest
