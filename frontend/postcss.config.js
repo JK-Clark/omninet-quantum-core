@@ -1,4 +1,8 @@
 // © 2021-2026 Jonathan Kamu / Genio Elite. All rights reserved.
 // Proprietary and confidential. Unauthorized reproduction or distribution is strictly prohibited.
-// Re-exports from i18n directory for backward compatibility
-export { t, supportedLanguages, default } from './i18n/index.js'
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
