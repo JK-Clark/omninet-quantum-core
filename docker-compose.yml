@@ -1,8 +1,6 @@
 # (c) 2021-2026 Jonathan Kamu / Genio Elite. Tous droits réservés.
 # docker-compose.yml — OmniNet Quantum-Core Stack Orchestration
 
-version: "3.9"
-
 networks:
   omninet-net:
     driver: bridge
@@ -39,7 +37,7 @@ services:
       retries: 5
       start_period: 20s
 
-  # ─── Redis Cache ────────────────────────────────────────────────────────────
+  # ─── Redis Cache ─────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: omninet-redis
@@ -103,7 +101,7 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80"]
       interval: 15s
-      timeout: 5s
+      timeout: 3s
       retries: 3
 
   # ─── Nginx Reverse Proxy ────────────────────────────────────────────────────
@@ -129,7 +127,7 @@ services:
       timeout: 10s
       retries: 3
 
-  # ─── Prometheus ─────────────────────────────────────────────────────────────
+  # ─── Prometheus ──────────────────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: omninet-prometheus
@@ -147,7 +145,7 @@ services:
     networks:
       - omninet-net
 
-  # ─── Grafana ────────────────────────────────────────────────────────────────
+  # ─── Grafana ─────────────────────────────────────────────────────────────────
   grafana:
     image: grafana/grafana:10.4.1
     container_name: omninet-grafana
