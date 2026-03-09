@@ -85,7 +85,7 @@ jobs:
         run: |
           cp .env.example .env
           # Inject CI-safe values so the build succeeds
-          sed -i 's/CHANGE_THIS_ADMIN_PASSWORD/CITestPassword123!/' .env
+          sed -i 's/CHANGE_THIS_ADMIN_PASSWORD/${{ secrets.CI_ADMIN_PASSWORD || '"'"'CIBuildPassword123!'"'"' }}/' .env
           sed -i 's/CHANGE_THIS_DB_PASSWORD/ci_db_password/' .env
           sed -i 's/CHANGE_THIS_REDIS_PASSWORD/ci_redis_password/' .env
           sed -i 's/CHANGE_THIS_TO_A_RANDOM_SECRET_KEY_64_CHARS_MINIMUM/ci_secret_key_64_chars_minimum_padding_here_!/' .env

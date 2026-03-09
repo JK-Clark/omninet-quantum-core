@@ -39,14 +39,9 @@ DEFAULT_ADMIN_PASSWORD = os.getenv("ADMIN_DEFAULT_PASSWORD", _DEFAULT_ADMIN_PASS
 
 _environment = os.getenv("ENVIRONMENT", "production").lower()
 if DEFAULT_ADMIN_PASSWORD == _DEFAULT_ADMIN_PASSWORD and _environment not in ("test", "development"):
-    if _environment == "production":
-        raise RuntimeError(
-            "FATAL: ADMIN_DEFAULT_PASSWORD is set to the insecure default 'OmniNet2026!'. "
-            "Set ADMIN_DEFAULT_PASSWORD in your .env file before starting in production."
-        )
-    logger.warning(
-        "ADMIN_DEFAULT_PASSWORD is not set — using insecure default. "
-        "Change this before deploying to production."
+    raise RuntimeError(
+        "FATAL: ADMIN_DEFAULT_PASSWORD is set to the insecure default 'OmniNet2026!'. "
+        "Set ADMIN_DEFAULT_PASSWORD in your .env file before starting in production."
     )
 
 # ── Account lockout (Redis) ───────────────────────────────────────────────────

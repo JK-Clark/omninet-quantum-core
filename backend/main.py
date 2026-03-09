@@ -94,7 +94,6 @@ async def security_headers_middleware(request: Request, call_next) -> Response:
     # Prevent caching of auth responses (PCI-DSS requirement)
     if request.url.path.startswith(_AUTH_PATH_PREFIX):
         response.headers["Cache-Control"] = "no-store"
-        response.headers["Pragma"] = "no-cache"
     return response
 
 
