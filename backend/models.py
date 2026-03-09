@@ -44,8 +44,22 @@ class License(Base):
     device_limit = Column(Integer, nullable=True)
     activated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     activated_at = Column(DateTime, nullable=True)
+    integrity_hash = Column(String(64), nullable=True)  # SHA-256 anti-tamper
 
     activated_by_user = relationship("User", back_populates="licenses", foreign_keys=[activated_by])
+
+
+class LicenseAuditLog(Base):
+    __tablename__ = "license_audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event = Column(String(50), nullable=False)  # activated | deactivated | tamper_detected | expired | access_denied
+    license_key_hash = Column(String(64), nullable=True)  # SHA-256 of key (never the raw key)
+    tier = Column(String(50), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    ip_address = Column(String(50), nullable=True)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Device(Base):

@@ -50,6 +50,23 @@ class LicenseActivate(BaseModel):
     key: str
 
 
+class LicenseAuditEntry(BaseModel):
+    id: int
+    event: str
+    tier: Optional[str]
+    user_id: Optional[int]
+    ip_address: Optional[str]
+    details: Optional[str]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class LicenseAuditResponse(BaseModel):
+    entries: List[LicenseAuditEntry]
+    total: int
+
+
 # ── Device ────────────────────────────────────────────────────────────────────
 
 class DeviceCreate(BaseModel):

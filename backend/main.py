@@ -5,7 +5,9 @@
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import (
@@ -13,16 +15,22 @@ from fastapi import (
     FastAPI,
     HTTPException,
     Query,
+    Request,
     WebSocket,
     WebSocketDisconnect,
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 import ai_predictor
 import auth
+import hmac as _hmac
+import integrity_check
 import license_manager
 import models
 import network_drivers
@@ -40,10 +48,17 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="OmniNet Quantum-Core API", version="1.0.0")
 
+# ── Rate Limiter ──────────────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # ── CORS ──────────────────────────────────────────────────────────────────────
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost,http://localhost:3000,http://localhost:80")
+ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,6 +67,22 @@ app.add_middleware(
 # ── Prometheus metrics ────────────────────────────────────────────────────────
 if PROMETHEUS_ENABLED:
     Instrumentator().instrument(app).expose(app)
+
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
+def require_admin(current_user: models.User = Depends(auth.get_current_user)) -> models.User:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return current_user
+
+
+def require_bank_license(db: Session = Depends(get_db)) -> None:
+    lic = license_manager.get_license_status(db)
+    if lic.tier != "bank" or not lic.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bank license required for AI features",
+        )
 
 
 # ── Startup ───────────────────────────────────────────────────────────────────
@@ -66,6 +97,16 @@ async def on_startup() -> None:
         ai_predictor.ensure_demo_predictions(db)
     finally:
         db.close()
+
+    # File integrity check — alert only, do not block startup
+    app_dir = Path(__file__).parent
+    manifest_path = app_dir / "integrity_manifest.json"
+    tampered = integrity_check.verify_integrity(app_dir, manifest_path)
+    if tampered:
+        logger.critical(
+            "STARTUP INTEGRITY WARNING: The following critical files have been modified: %s",
+            tampered,
+        )
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -133,12 +174,62 @@ async def get_license_status(
 
 
 @app.post("/api/license/activate", response_model=schemas.LicenseStatus, tags=["License"])
+@limiter.limit("5/minute")
 async def activate_license(
+    request: Request,
     payload: schemas.LicenseActivate,
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
-    return license_manager.activate_license(payload.key, current_user.id, db)
+    ip_address = request.client.host if request.client else None
+    return license_manager.activate_license(payload.key, current_user.id, db, ip_address=ip_address)
+
+
+@app.get("/api/license/audit", response_model=schemas.LicenseAuditResponse, tags=["License"])
+async def get_license_audit(
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    entries = (
+        db.query(models.LicenseAuditLog)
+        .order_by(models.LicenseAuditLog.created_at.desc())
+        .all()
+    )
+    return schemas.LicenseAuditResponse(
+        entries=[schemas.LicenseAuditEntry.model_validate(e) for e in entries],
+        total=len(entries),
+    )
+
+
+@app.get("/api/license/verify-integrity", tags=["License"])
+async def verify_license_integrity(
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Check integrity hashes for all license records and return a report."""
+    licenses = db.query(models.License).all()
+    report = []
+    for lic in licenses:
+        if not lic.integrity_hash or not license_manager.LICENSE_SECRET:
+            report.append({
+                "id": lic.id,
+                "tier": lic.tier,
+                "is_active": lic.is_active,
+                "integrity": "unchecked",
+                "reason": "No integrity hash or LICENSE_SECRET not configured",
+            })
+            continue
+        expected = license_manager._compute_integrity_hash(
+            lic.key, lic.tier, lic.expires_at, lic.device_limit
+        )
+        ok = _hmac.compare_digest(expected, lic.integrity_hash)
+        report.append({
+            "id": lic.id,
+            "tier": lic.tier,
+            "is_active": lic.is_active,
+            "integrity": "ok" if ok else "TAMPERED",
+        })
+    return {"licenses": report, "total": len(report)}
 
 
 # ── Devices ───────────────────────────────────────────────────────────────────
@@ -204,10 +295,11 @@ async def get_topology(
     return network_drivers.get_topology(db)
 
 
-# ── AI Predictions ────────────────────────────────────────────────────────────
+# ── AI Predictions (Bank license required) ────────────────────────────────────
 @app.get("/api/ai/predictions", response_model=List[schemas.AIpredictionResponse], tags=["AI"])
 async def get_all_predictions(
     current_user: models.User = Depends(auth.get_current_user),
+    _bank: None = Depends(require_bank_license),
     db: Session = Depends(get_db),
 ):
     predictions = db.query(models.AIprediction).all()
@@ -221,6 +313,7 @@ async def get_all_predictions(
 async def get_device_prediction(
     device_id: int,
     current_user: models.User = Depends(auth.get_current_user),
+    _bank: None = Depends(require_bank_license),
     db: Session = Depends(get_db),
 ):
     try:
@@ -281,3 +374,4 @@ async def websocket_topology(websocket: WebSocket, db: Session = Depends(get_db)
         manager.disconnect(websocket)
     except Exception:
         manager.disconnect(websocket)
+
