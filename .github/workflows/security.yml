@@ -13,11 +13,17 @@ on:
     # Weekly on Sunday at 02:00 UTC
     - cron: "0 2 * * 0"
 
+# Minimal permissions for the GITHUB_TOKEN (least-privilege)
+permissions:
+  contents: read
+
 jobs:
   # ── 1. Python dependency vulnerability audit ────────────────────────────────
   dependency-audit:
     name: Python Dependency Audit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +57,8 @@ jobs:
   npm-audit:
     name: NPM Audit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: frontend
@@ -75,6 +83,8 @@ jobs:
   secret-scan:
     name: Secret Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
