@@ -21,3 +21,4 @@ websockets==12.0
 python-nmap==0.7.1
 asyncio-mqtt==0.16.2
 prometheus-fastapi-instrumentator==7.0.0
+slowapi==0.1.9
