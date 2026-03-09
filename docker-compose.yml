@@ -17,7 +17,7 @@ volumes:
 
 services:
 
-  # ─── PostgreSQL Database ────────────────────────────────────────────────────
+  # ─── PostgreSQL Database ───────────────────────────────────────────────────
   db:
     image: postgres:15-alpine
     container_name: omninet-db
@@ -37,7 +37,7 @@ services:
       retries: 5
       start_period: 20s
 
-  # ─── Redis Cache ─────────────────────────────────────────────────────────────
+  # ─── Redis Cache ──────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: omninet-redis
@@ -53,7 +53,7 @@ services:
       timeout: 3s
       retries: 5
 
-  # ─── Backend API (FastAPI / Uvicorn) ────────────────────────────────────────
+  # ─── Backend API (FastAPI / Uvicorn) ──────────────────────────────────────
   app:
     build:
       context: ./backend
@@ -84,9 +84,9 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 50s
 
-  # ─── Frontend (React / Vite — served via Nginx) ─────────────────────────────
+  # ─── Frontend (React / Vite — served via Nginx) ──────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -104,7 +104,7 @@ services:
       timeout: 3s
       retries: 3
 
-  # ─── Nginx Reverse Proxy ────────────────────────────────────────────────────
+  # ─── Nginx Reverse Proxy ───────────────────────────────────────���─────────
   nginx:
     build:
       context: ./nginx
@@ -127,7 +127,7 @@ services:
       timeout: 10s
       retries: 3
 
-  # ─── Prometheus ──────────────────────────────────────────────────────────────
+  # ─── Prometheus ──────────────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: omninet-prometheus
@@ -145,7 +145,7 @@ services:
     networks:
       - omninet-net
 
-  # ─── Grafana ─────────────────────────────────────────────────────────────────
+  # ─── Grafana ─────────────────────────────────────────────────────────────
   grafana:
     image: grafana/grafana:10.4.1
     container_name: omninet-grafana
