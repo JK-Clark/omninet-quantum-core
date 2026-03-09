@@ -28,6 +28,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 import ai_predictor
+import audit
 import auth
 import hmac as _hmac
 import integrity_check
@@ -118,6 +119,7 @@ async def health_check():
 # ── Auth ──────────────────────────────────────────────────────────────────────
 @app.post("/api/auth/login", response_model=schemas.Token, tags=["Auth"])
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
@@ -129,6 +131,12 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = auth.create_access_token(data={"sub": user.email})
+    audit.log_action(
+        db,
+        action="user.login",
+        user_id=user.id,
+        ip_address=request.client.host if request.client else None,
+    )
     return schemas.Token(
         access_token=access_token,
         token_type="bearer",
@@ -241,6 +249,26 @@ async def list_devices(
     return db.query(models.Device).all()
 
 
+@app.post("/api/devices", response_model=schemas.DeviceResponse, tags=["Devices"])
+async def create_device(
+    payload: schemas.DeviceCreate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db),
+):
+    device = models.Device(**payload.model_dump())
+    db.add(device)
+    db.commit()
+    db.refresh(device)
+    audit.log_action(
+        db,
+        action="device.created",
+        user_id=current_user.id,
+        resource_type="device",
+        resource_id=device.id,
+    )
+    return device
+
+
 @app.get("/api/devices/alerts", response_model=List[schemas.AlertResponse], tags=["Devices"])
 async def get_alerts(
     current_user: models.User = Depends(auth.get_current_user),
@@ -331,6 +359,29 @@ async def generate_report(
     db: Session = Depends(get_db),
 ):
     return reports.generate_device_report(device_id, db)
+
+
+# ── Audit Logs ────────────────────────────────────────────────────────────────
+@app.get("/api/audit/logs", tags=["Audit"])
+async def get_audit_logs(
+    current_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Return the 100 most recent audit log entries (admin only)."""
+    logs = audit.get_recent_logs(db, limit=100)
+    return [
+        {
+            "id": entry.id,
+            "user_id": entry.user_id,
+            "action": entry.action,
+            "resource_type": entry.resource_type,
+            "resource_id": entry.resource_id,
+            "ip_address": entry.ip_address,
+            "details": entry.details,
+            "created_at": entry.created_at.isoformat() if entry.created_at else None,
+        }
+        for entry in logs
+    ]
 
 
 # ── WebSocket — real-time topology ───────────────────────────────────────────
